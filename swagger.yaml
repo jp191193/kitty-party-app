@@ -1,0 +1,1348 @@
+openapi: 3.0.3
+info:
+  title: Kitty Party App API
+  description: |
+    REST API for managing Indian-style kitty party savings pools.
+
+    Members contribute a fixed amount each month; one member hosts and
+    receives the pooled amount each cycle. This API covers the full
+    lifecycle: members, groups & memberships, profiles, kitty cycles,
+    monthly dues, payments, and payouts.
+
+    All successful responses use the envelope `{ "success": true, "data": ... }`.
+    All errors use `{ "success": false, "error": { "code": <http>, "message": "..." } }`.
+  version: "1.0.0"
+  contact:
+    name: Kitty Party Dev
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Members
+  - name: Profiles
+  - name: Groups
+  - name: Memberships
+  - name: Contributions
+  - name: Contribution Tracking
+  - name: Payouts
+  - name: Kitty Cycles
+
+security: []
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Liveness probe
+      security: []
+      responses:
+        "200":
+          description: Service is up
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, example: ok }
+
+  /api/v1/auth/token:
+    post:
+      tags: [Auth]
+      summary: Issue a JWT for a given user id
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenerateTokenRequest"
+      responses:
+        "200":
+          description: JWT issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenerateTokenResponseEnvelope"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "500": { $ref: "#/components/responses/InternalError" }
+
+  # ─── Members ────────────────────────────────────────────────────────────────
+  /api/v1/members:
+    get:
+      tags: [Members]
+      summary: List all members
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberListEnvelope"
+    post:
+      tags: [Members]
+      summary: Create a member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateMemberRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/members/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Members]
+      summary: Get member by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Members]
+      summary: Update a member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateMemberRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Members]
+      summary: Delete a member
+      responses:
+        "204": { description: Deleted }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ─── Profiles ───────────────────────────────────────────────────────────────
+  /api/v1/members/{id}/profile:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Profiles]
+      summary: Get a member's extended profile
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberProfileResponseEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Profiles]
+      summary: Upsert a member's extended profile
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpsertProfileRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/MemberProfileEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/members/{id}/profile/summary:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Profiles]
+      summary: Aggregated profile with groups & contribution stats
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ProfileSummaryEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ─── Groups ─────────────────────────────────────────────────────────────────
+  /api/v1/groups:
+    get:
+      tags: [Groups]
+      summary: List all groups
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupListEnvelope" }
+    post:
+      tags: [Groups]
+      summary: Create a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateGroupRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/groups/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Groups]
+      summary: Get a group
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [Groups]
+      summary: Update a group
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateGroupRequest" }
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [Groups]
+      summary: Delete a group
+      responses:
+        "204": { description: Deleted }
+
+  /api/v1/groups-member-counts:
+    get:
+      tags: [Memberships]
+      summary: Member count for every group
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupMemberCountListEnvelope" }
+
+  /api/v1/groups/{id}/members:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Memberships]
+      summary: List members in a group
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupMembershipListEnvelope" }
+    post:
+      tags: [Memberships]
+      summary: Add a member to a group
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AddMemberRequest" }
+      responses:
+        "201":
+          description: Added
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/GroupMembershipEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/groups/{id}/members/count:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Memberships]
+      summary: Count members in a group
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/APIResponse"
+                  - type: object
+                    properties:
+                      data:
+                        type: object
+                        properties:
+                          count: { type: integer, example: 7 }
+
+  # ─── Contributions ──────────────────────────────────────────────────────────
+  /api/v1/contributions/dues/generate:
+    post:
+      tags: [Contributions]
+      summary: Fan out monthly dues for every ACTIVE group member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GenerateDuesRequest" }
+      responses:
+        "201":
+          description: Dues generated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionDueListEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/v1/contributions/groups/{groupID}/dues:
+    parameters:
+      - in: path
+        name: groupID
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: cycle_month
+        schema: { type: integer, minimum: 1, maximum: 12 }
+    get:
+      tags: [Contributions]
+      summary: List dues for a group (optionally filtered by cycle_month)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionDueListEnvelope" }
+
+  /api/v1/contributions/payments:
+    post:
+      tags: [Contributions]
+      summary: Record a payment against a due
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordPaymentRequest" }
+      responses:
+        "201":
+          description: Payment recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionPaymentEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ─── Contribution Tracking ──────────────────────────────────────────────────
+  /api/v1/contribution-tracking:
+    post:
+      tags: [Contribution Tracking]
+      summary: Initialize a per-member, per-cycle tracking row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateTrackingRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/contribution-tracking/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Contribution Tracking]
+      summary: Get a tracking row by ID
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/contribution-tracking/{id}/payment:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    patch:
+      tags: [Contribution Tracking]
+      summary: Apply a payment delta to a tracking row
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/UpdateTrackingRequest" }
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/contribution-tracking/dues/{dueID}:
+    parameters:
+      - in: path
+        name: dueID
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Contribution Tracking]
+      summary: Get the tracking row tied to a specific due
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingEnvelope" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/contribution-tracking/groups/{groupID}:
+    parameters:
+      - in: path
+        name: groupID
+        required: true
+        schema: { type: string, format: uuid }
+      - in: query
+        name: cycle_month
+        schema: { type: integer, minimum: 1, maximum: 12 }
+      - in: query
+        name: cycle_year
+        schema: { type: integer, minimum: 2000 }
+    get:
+      tags: [Contribution Tracking]
+      summary: List tracking rows for a group (optionally filtered by cycle)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingListEnvelope" }
+
+  /api/v1/contribution-tracking/members/{memberID}:
+    parameters:
+      - in: path
+        name: memberID
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Contribution Tracking]
+      summary: List tracking rows for a member across groups/cycles
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ContributionTrackingListEnvelope" }
+
+  # ─── Payouts ────────────────────────────────────────────────────────────────
+  /api/v1/payouts/schedule:
+    post:
+      tags: [Payouts]
+      summary: Schedule a future payout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateScheduleRequest" }
+      responses:
+        "201":
+          description: Scheduled
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutScheduleEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/payouts/disburse:
+    post:
+      tags: [Payouts]
+      summary: Record a disbursement settling a scheduled payout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RecordDisbursementRequest" }
+      responses:
+        "201":
+          description: Disbursed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/DisbursementEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/payouts/groups/{groupID}:
+    parameters:
+      - in: path
+        name: groupID
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Payouts]
+      summary: List payouts for a group
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutSummaryListEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/payouts/recipients/{memberID}:
+    parameters:
+      - in: path
+        name: memberID
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Payouts]
+      summary: List payouts for a recipient
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutSummaryListEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/payouts/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Payouts]
+      summary: Get a payout
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/PayoutSummaryEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/payouts/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    patch:
+      tags: [Payouts]
+      summary: Cancel a scheduled payout
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelScheduleRequest" }
+      responses:
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ─── Kitty Cycles ───────────────────────────────────────────────────────────
+  /api/v1/kitty-cycles/schedule:
+    post:
+      tags: [Kitty Cycles]
+      summary: Create a kitty cycle and all its monthly schedule rows atomically
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/ScheduleCycleRequest" }
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KittyCycleWithScheduleEnvelope" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /api/v1/kitty-cycles/groups/{groupID}:
+    parameters:
+      - in: path
+        name: groupID
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Kitty Cycles]
+      summary: List cycles for a group
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KittyCycleListEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/v1/kitty-cycles/{id}:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    get:
+      tags: [Kitty Cycles]
+      summary: Get a cycle with its full schedule
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KittyCycleWithScheduleEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/v1/kitty-cycles/{id}/start:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    patch:
+      tags: [Kitty Cycles]
+      summary: Start a PENDING cycle (transition to ACTIVE)
+      description: |
+        Transitions a kitty cycle from **PENDING** to **ACTIVE** and marks the
+        first schedule entry (lowest `cycle_number`) as **IN_PROGRESS**.
+        Only the group's creator or an ADMIN member may call this endpoint.
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Cycle started — returns updated cycle with full schedule
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/KittyCycleWithScheduleEnvelope" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409":
+          description: Cycle is not in PENDING status
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/APIErrorResponse" }
+
+  /api/v1/kitty-cycles/{id}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/PathID"
+    patch:
+      tags: [Kitty Cycles]
+      summary: Cancel a PENDING or ACTIVE cycle
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelCycleRequest" }
+      responses:
+        "204": { description: Cancelled }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Issue a token via `POST /api/v1/auth/token`.
+
+  parameters:
+    PathID:
+      in: path
+      name: id
+      required: true
+      schema: { type: string, format: uuid }
+
+  responses:
+    BadRequest:
+      description: Validation failed or malformed payload
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+    Unauthorized:
+      description: Missing or invalid JWT
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+    Forbidden:
+      description: Caller is not permitted to perform this action
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+    Conflict:
+      description: Duplicate or invalid-state operation
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+    InternalError:
+      description: Unhandled server error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/APIErrorResponse" }
+
+  schemas:
+    # ── Envelope ────────────────────────────────────────────────────────────
+    APIResponse:
+      type: object
+      required: [success]
+      properties:
+        success: { type: boolean, example: true }
+        data: {}
+
+    APIErrorResponse:
+      type: object
+      required: [success, error]
+      properties:
+        success: { type: boolean, example: false }
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: integer, example: 400 }
+            message: { type: string, example: "validation failed: ..." }
+
+    # ── Auth ────────────────────────────────────────────────────────────────
+    GenerateTokenRequest:
+      type: object
+      required: [user_id]
+      properties:
+        user_id: { type: string, format: uuid }
+
+    GenerateTokenResponse:
+      type: object
+      properties:
+        token: { type: string }
+
+    GenerateTokenResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/GenerateTokenResponse" }
+
+    # ── Member ──────────────────────────────────────────────────────────────
+    Member:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        name:       { type: string }
+        email:      { type: string, format: email }
+        phone:      { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreateMemberRequest:
+      type: object
+      required: [name, email, phone]
+      properties:
+        name:  { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 10, maxLength: 15 }
+
+    UpdateMemberRequest:
+      type: object
+      properties:
+        name:  { type: string, minLength: 2, maxLength: 100 }
+        email: { type: string, format: email }
+        phone: { type: string, minLength: 10, maxLength: 15 }
+
+    MemberEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/Member" }
+
+    MemberListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Member" }
+
+    # ── Profile ─────────────────────────────────────────────────────────────
+    MemberProfile:
+      type: object
+      properties:
+        id:                  { type: string, format: uuid }
+        member_id:           { type: string, format: uuid }
+        date_of_birth:       { type: string, format: date, nullable: true }
+        profile_picture_url: { type: string, nullable: true }
+        address:             { type: string, nullable: true }
+        city:                { type: string, nullable: true }
+        state:               { type: string, nullable: true }
+        pincode:             { type: string, nullable: true }
+        occupation:          { type: string, nullable: true }
+        about:               { type: string, nullable: true }
+        created_at:          { type: string, format: date-time }
+        updated_at:          { type: string, format: date-time }
+
+    UpsertProfileRequest:
+      type: object
+      properties:
+        date_of_birth:       { type: string, description: "YYYY-MM-DD" }
+        profile_picture_url: { type: string, maxLength: 2048 }
+        address:             { type: string, maxLength: 255 }
+        city:                { type: string, maxLength: 100 }
+        state:               { type: string, maxLength: 100 }
+        pincode:             { type: string, maxLength: 10 }
+        occupation:          { type: string, maxLength: 100 }
+        about:               { type: string, maxLength: 500 }
+
+    MemberProfileResponse:
+      type: object
+      properties:
+        id:         { type: string, format: uuid }
+        name:       { type: string }
+        email:      { type: string, format: email }
+        phone:      { type: string }
+        profile:    { $ref: "#/components/schemas/MemberProfile" }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    GroupEntry:
+      type: object
+      properties:
+        group_id:   { type: string, format: uuid }
+        group_name: { type: string }
+        role:       { type: string, enum: [MEMBER, ADMIN] }
+        status:     { type: string, enum: [ACTIVE, PENDING, REJECTED] }
+        joined_at:  { type: string, format: date-time }
+
+    ProfileSummary:
+      type: object
+      properties:
+        id:           { type: string, format: uuid }
+        name:         { type: string }
+        email:        { type: string, format: email }
+        phone:        { type: string }
+        profile:      { $ref: "#/components/schemas/MemberProfile" }
+        groups:
+          type: array
+          items: { $ref: "#/components/schemas/GroupEntry" }
+        group_count:  { type: integer }
+        total_paid:   { type: number, format: double }
+        pending_dues: { type: integer }
+        created_at:   { type: string, format: date-time }
+        updated_at:   { type: string, format: date-time }
+
+    MemberProfileEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/MemberProfile" }
+
+    MemberProfileResponseEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/MemberProfileResponse" }
+
+    ProfileSummaryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/ProfileSummary" }
+
+    # ── Group ───────────────────────────────────────────────────────────────
+    Group:
+      type: object
+      properties:
+        id:             { type: string, format: uuid }
+        name:           { type: string }
+        monthly_amount: { type: number, format: double }
+        duration:       { type: integer, description: "Number of months" }
+        start_date:     { type: string, format: date-time }
+        created_by:     { type: string, format: uuid }
+        created_at:     { type: string, format: date-time }
+        updated_at:     { type: string, format: date-time }
+
+    CreateGroupRequest:
+      type: object
+      required: [name, monthly_amount, duration, start_date, created_by]
+      properties:
+        name:           { type: string, minLength: 2, maxLength: 100 }
+        monthly_amount: { type: number, format: double, exclusiveMinimum: 0 }
+        duration:       { type: integer, minimum: 1 }
+        start_date:     { type: string, format: date-time }
+        created_by:     { type: string, format: uuid }
+
+    UpdateGroupRequest:
+      type: object
+      properties:
+        name:           { type: string, minLength: 2, maxLength: 100 }
+        monthly_amount: { type: number, format: double, exclusiveMinimum: 0 }
+        duration:       { type: integer, minimum: 1 }
+        start_date:     { type: string, format: date-time }
+
+    GroupMembership:
+      type: object
+      properties:
+        id:          { type: string, format: uuid }
+        group_id:    { type: string, format: uuid }
+        member_id:   { type: string, format: uuid }
+        member_name: { type: string }
+        status:      { type: string, enum: [ACTIVE, PENDING, REJECTED] }
+        role:        { type: string, enum: [MEMBER, ADMIN] }
+        joined_at:   { type: string, format: date-time }
+
+    AddMemberRequest:
+      type: object
+      required: [member_id]
+      properties:
+        member_id: { type: string, format: uuid }
+
+    GroupMemberCount:
+      type: object
+      properties:
+        id:    { type: string, format: uuid }
+        name:  { type: string }
+        count: { type: integer }
+
+    GroupEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/Group" }
+
+    GroupListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/Group" }
+
+    GroupMembershipEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/GroupMembership" }
+
+    GroupMembershipListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/GroupMembership" }
+
+    GroupMemberCountListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/GroupMemberCount" }
+
+    # ── Contributions ───────────────────────────────────────────────────────
+    ContributionDue:
+      type: object
+      properties:
+        id:               { type: string, format: uuid }
+        group_id:         { type: string, format: uuid }
+        member_id:        { type: string, format: uuid }
+        host_member_id:   { type: string, format: uuid }
+        cycle_month:      { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:       { type: integer, minimum: 2000 }
+        cycle_number:     { type: integer, minimum: 1 }
+        kitty_party_date: { type: string, format: date-time }
+        due_date:         { type: string, format: date-time }
+        amount:           { type: number, format: double }
+        status:           { type: string, enum: [PENDING, PAID, OVERDUE] }
+        created_at:       { type: string, format: date-time }
+        updated_at:       { type: string, format: date-time, nullable: true }
+
+    ContributionPayment:
+      type: object
+      properties:
+        id:              { type: string, format: uuid }
+        due_id:          { type: string, format: uuid }
+        amount_paid:     { type: number, format: double }
+        payment_date:    { type: string, format: date-time }
+        payment_mode:    { type: string, enum: [UPI, CASH, BANK] }
+        transaction_ref: { type: string, nullable: true }
+        status:          { type: string, enum: [SUCCESS, FAILED] }
+        created_at:      { type: string, format: date-time }
+
+    GenerateDuesRequest:
+      type: object
+      required:
+        - group_id
+        - host_member_id
+        - cycle_month
+        - cycle_year
+        - cycle_number
+        - kitty_party_date
+        - due_date
+        - amount
+      properties:
+        group_id:         { type: string, format: uuid }
+        host_member_id:   { type: string, format: uuid }
+        cycle_month:      { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:       { type: integer, minimum: 2000 }
+        cycle_number:     { type: integer, minimum: 1 }
+        kitty_party_date: { type: string, format: date-time }
+        due_date:         { type: string, format: date-time }
+        amount:           { type: number, format: double, exclusiveMinimum: 0 }
+
+    RecordPaymentRequest:
+      type: object
+      required: [due_id, amount_paid, payment_mode, status]
+      properties:
+        due_id:          { type: string, format: uuid }
+        amount_paid:     { type: number, format: double, exclusiveMinimum: 0 }
+        payment_mode:    { type: string, enum: [UPI, CASH, BANK] }
+        transaction_ref: { type: string, nullable: true }
+        status:          { type: string, enum: [SUCCESS, FAILED] }
+
+    ContributionDueListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ContributionDue" }
+
+    ContributionPaymentEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/ContributionPayment" }
+
+    # ── Contribution Tracking ───────────────────────────────────────────────
+    ContributionTracking:
+      type: object
+      properties:
+        id:                 { type: string, format: uuid }
+        group_id:           { type: string, format: uuid }
+        member_id:          { type: string, format: uuid }
+        due_id:             { type: string, format: uuid }
+        cycle_month:        { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:         { type: integer, minimum: 2000 }
+        cycle_number:       { type: integer, minimum: 1 }
+        total_due:          { type: number, format: double }
+        total_paid:         { type: number, format: double }
+        balance:            { type: number, format: double }
+        status:             { type: string, enum: [PENDING, PARTIAL, PAID, OVERDUE] }
+        last_payment_date:  { type: string, format: date-time, nullable: true }
+        created_at:         { type: string, format: date-time }
+        updated_at:         { type: string, format: date-time }
+
+    CreateTrackingRequest:
+      type: object
+      required:
+        - group_id
+        - member_id
+        - due_id
+        - cycle_month
+        - cycle_year
+        - cycle_number
+        - total_due
+      properties:
+        group_id:     { type: string, format: uuid }
+        member_id:    { type: string, format: uuid }
+        due_id:       { type: string, format: uuid }
+        cycle_month:  { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:   { type: integer, minimum: 2000 }
+        cycle_number: { type: integer, minimum: 1 }
+        total_due:    { type: number, format: double, exclusiveMinimum: 0 }
+
+    UpdateTrackingRequest:
+      type: object
+      required: [amount_paid]
+      properties:
+        amount_paid:       { type: number, format: double, exclusiveMinimum: 0 }
+        last_payment_date: { type: string, format: date-time, nullable: true }
+
+    ContributionTrackingEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/ContributionTracking" }
+
+    ContributionTrackingListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/ContributionTracking" }
+
+    # ── Payouts ─────────────────────────────────────────────────────────────
+    PayoutSchedule:
+      type: object
+      properties:
+        id:             { type: string, format: uuid }
+        group_id:       { type: string, format: uuid }
+        recipient_id:   { type: string, format: uuid }
+        cycle_number:   { type: integer, minimum: 1 }
+        cycle_month:    { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:     { type: integer, minimum: 2000 }
+        scheduled_date: { type: string, format: date-time }
+        pool_amount:    { type: number, format: double }
+        status:         { type: string, enum: [SCHEDULED, DISBURSED, CANCELLED] }
+        notes:          { type: string, nullable: true }
+        created_by:     { type: string, format: uuid }
+        created_at:     { type: string, format: date-time }
+        updated_at:     { type: string, format: date-time, nullable: true }
+
+    Disbursement:
+      type: object
+      properties:
+        id:              { type: string, format: uuid }
+        payout_id:       { type: string, format: uuid }
+        amount_paid:     { type: number, format: double }
+        payment_date:    { type: string, format: date-time }
+        payment_mode:    { type: string, enum: [UPI, CASH, BANK] }
+        transaction_ref: { type: string, nullable: true }
+        disbursed_by:    { type: string, format: uuid }
+        notes:           { type: string, nullable: true }
+        created_at:      { type: string, format: date-time }
+
+    PayoutSummary:
+      allOf:
+        - $ref: "#/components/schemas/PayoutSchedule"
+        - type: object
+          properties:
+            disbursement:
+              $ref: "#/components/schemas/Disbursement"
+
+    CreateScheduleRequest:
+      type: object
+      required:
+        - group_id
+        - recipient_id
+        - cycle_number
+        - cycle_month
+        - cycle_year
+        - scheduled_date
+        - pool_amount
+      properties:
+        group_id:       { type: string, format: uuid }
+        recipient_id:   { type: string, format: uuid }
+        cycle_number:   { type: integer, minimum: 1 }
+        cycle_month:    { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:     { type: integer, minimum: 2000 }
+        scheduled_date: { type: string, format: date-time }
+        pool_amount:    { type: number, format: double, exclusiveMinimum: 0 }
+        notes:          { type: string, nullable: true }
+
+    RecordDisbursementRequest:
+      type: object
+      required: [payout_id, amount_paid, payment_mode]
+      properties:
+        payout_id:       { type: string, format: uuid }
+        amount_paid:     { type: number, format: double, exclusiveMinimum: 0 }
+        payment_mode:    { type: string, enum: [UPI, CASH, BANK] }
+        transaction_ref: { type: string, nullable: true }
+        notes:           { type: string, nullable: true }
+
+    CancelScheduleRequest:
+      type: object
+      properties:
+        notes: { type: string, nullable: true }
+
+    PayoutScheduleEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/PayoutSchedule" }
+
+    DisbursementEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/Disbursement" }
+
+    PayoutSummaryEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/PayoutSummary" }
+
+    PayoutSummaryListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/PayoutSummary" }
+
+    # ── Kitty Cycles ────────────────────────────────────────────────────────
+    KittyCycle:
+      type: object
+      properties:
+        id:             { type: string, format: uuid }
+        group_id:       { type: string, format: uuid }
+        name:           { type: string, nullable: true }
+        total_cycles:   { type: integer, minimum: 1 }
+        monthly_amount: { type: number, format: double }
+        pool_amount:    { type: number, format: double }
+        start_date:     { type: string, format: date-time }
+        end_date:       { type: string, format: date-time }
+        status:         { type: string, enum: [PENDING, ACTIVE, COMPLETED, CANCELLED] }
+        notes:          { type: string, nullable: true }
+        created_by:     { type: string, format: uuid }
+        created_at:     { type: string, format: date-time }
+        updated_at:     { type: string, format: date-time, nullable: true }
+
+    KittySchedule:
+      type: object
+      properties:
+        id:             { type: string, format: uuid }
+        cycle_id:       { type: string, format: uuid }
+        group_id:       { type: string, format: uuid }
+        cycle_number:   { type: integer, minimum: 1 }
+        cycle_month:    { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:     { type: integer, minimum: 2000 }
+        host_member_id: { type: string, format: uuid }
+        scheduled_date: { type: string, format: date-time }
+        due_date:       { type: string, format: date-time }
+        pool_amount:    { type: number, format: double }
+        status:         { type: string, enum: [SCHEDULED, IN_PROGRESS, COMPLETED, CANCELLED] }
+        venue:          { type: string, nullable: true, description: "Location where the kitty was/will be held" }
+        notes:          { type: string, nullable: true }
+        created_at:     { type: string, format: date-time }
+        updated_at:     { type: string, format: date-time, nullable: true }
+
+    KittyCycleWithSchedule:
+      allOf:
+        - $ref: "#/components/schemas/KittyCycle"
+        - type: object
+          properties:
+            schedule:
+              type: array
+              items: { $ref: "#/components/schemas/KittySchedule" }
+
+    ScheduleEntryRequest:
+      type: object
+      required:
+        - cycle_number
+        - cycle_month
+        - cycle_year
+        - host_member_id
+        - scheduled_date
+        - due_date
+      properties:
+        cycle_number:   { type: integer, minimum: 1 }
+        cycle_month:    { type: integer, minimum: 1, maximum: 12 }
+        cycle_year:     { type: integer, minimum: 2000 }
+        host_member_id: { type: string, format: uuid }
+        scheduled_date: { type: string, format: date-time }
+        due_date:       { type: string, format: date-time }
+        venue:          { type: string, nullable: true }
+        notes:          { type: string, nullable: true }
+
+    ScheduleCycleRequest:
+      type: object
+      required: [group_id, monthly_amount, start_date, end_date, schedule]
+      properties:
+        group_id:       { type: string, format: uuid }
+        name:           { type: string, nullable: true }
+        monthly_amount: { type: number, format: double, exclusiveMinimum: 0 }
+        start_date:     { type: string, format: date-time }
+        end_date:       { type: string, format: date-time }
+        notes:          { type: string, nullable: true }
+        schedule:
+          type: array
+          minItems: 1
+          items: { $ref: "#/components/schemas/ScheduleEntryRequest" }
+
+    CancelCycleRequest:
+      type: object
+      properties:
+        notes: { type: string, nullable: true }
+
+    KittyCycleListEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data:
+              type: array
+              items: { $ref: "#/components/schemas/KittyCycle" }
+
+    KittyCycleWithScheduleEnvelope:
+      allOf:
+        - $ref: "#/components/schemas/APIResponse"
+        - type: object
+          properties:
+            data: { $ref: "#/components/schemas/KittyCycleWithSchedule" }

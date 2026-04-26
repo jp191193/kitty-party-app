@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # The API Application
+  api:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: kitty_party_api
+    ports:
+      - "8080:8080"
+    environment:
+      - APP_NAME=kitty-party-app
+      - APP_ENV=development
+      - APP_PORT=8080
+      # Wait for postgres to be ready using exact hostname in the network
+      - DATABASE_URL=postgres://postgres:secure_password@postgres_db:5432/kitty_party?sslmode=disable
+    depends_on:
+      postgres_db:
+        condition: service_healthy # Wait until the DB confirms it is running
+    networks:
+      - kitty_network
+
+  # PostgreSQL Database
+  postgres_db:
+    image: postgres:15-alpine
+    container_name: kitty_party_db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=secure_password
+      - POSTGRES_DB=kitty_party
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Automatically initialize the database with your scripts
+      # It executes them in alphabetical/numerical order
+      - ./db/scripts:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d kitty_party"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - kitty_network
+
+volumes:
+  pgdata: # Persist database data locally so it isn't lost on restart
+
+networks:
+  kitty_network:
+    driver: bridge

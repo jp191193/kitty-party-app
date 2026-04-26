@@ -1,0 +1,653 @@
+{
+  "info": {
+    "_postman_id": "kitty-party-app-collection-v1",
+    "name": "Kitty Party App",
+    "description": "Full API collection for Kitty Party App. Run requests in folder order for a complete flow. Auth token is captured automatically after POST /auth/token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url",      "value": "http://localhost:8080", "type": "string" },
+    { "key": "auth_token",    "value": "",                      "type": "string" },
+    { "key": "member_id",     "value": "",                      "type": "string" },
+    { "key": "group_id",      "value": "",                      "type": "string" },
+    { "key": "due_id",        "value": "",                      "type": "string" },
+    { "key": "payment_id",    "value": "",                      "type": "string" },
+    { "key": "tracking_id",   "value": "",                      "type": "string" },
+    { "key": "payout_id",     "value": "",                      "type": "string" },
+    { "key": "cycle_id",      "value": "",                      "type": "string" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      { "key": "token", "value": "{{auth_token}}", "type": "string" }
+    ]
+  },
+  "item": [
+
+    {
+      "name": "01 - Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/health", "host": ["{{base_url}}"], "path": ["health"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "02 - Auth",
+      "item": [
+        {
+          "name": "Generate Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.token) {",
+                  "    pm.collectionVariables.set('auth_token', json.data.token);",
+                  "    console.log('Token saved:', json.data.token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"{{member_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/auth/token", "host": ["{{base_url}}"], "path": ["api", "v1", "auth", "token"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "03 - Members",
+      "item": [
+        {
+          "name": "Create Member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('member_id', json.data.id);",
+                  "    console.log('member_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Anjali Sharma\",\n  \"email\": \"anjali@example.com\",\n  \"phone\": \"9876543210\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/members", "host": ["{{base_url}}"], "path": ["api", "v1", "members"] }
+          }
+        },
+        {
+          "name": "List Members",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/members", "host": ["{{base_url}}"], "path": ["api", "v1", "members"] }
+          }
+        },
+        {
+          "name": "Get Member by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}"] }
+          }
+        },
+        {
+          "name": "Update Member",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Anjali Sharma Updated\",\n  \"phone\": \"9876543211\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Member",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "04 - Groups",
+      "item": [
+        {
+          "name": "Create Group",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('group_id', json.data.id);",
+                  "    console.log('group_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sharma Kitty Group\",\n  \"monthly_amount\": 5000,\n  \"duration\": 12,\n  \"start_date\": \"2026-05-01T00:00:00Z\",\n  \"created_by\": \"{{member_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/groups", "host": ["{{base_url}}"], "path": ["api", "v1", "groups"] }
+          }
+        },
+        {
+          "name": "List Groups",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups", "host": ["{{base_url}}"], "path": ["api", "v1", "groups"] }
+          }
+        },
+        {
+          "name": "Get Group by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}"] }
+          }
+        },
+        {
+          "name": "Update Group",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Sharma Kitty Group Updated\",\n  \"monthly_amount\": 6000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}"] }
+          }
+        },
+        {
+          "name": "Delete Group",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "DELETE",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}"] }
+          }
+        },
+        {
+          "name": "Group Member Counts (All Groups)",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups-member-counts", "host": ["{{base_url}}"], "path": ["api", "v1", "groups-member-counts"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "05 - Memberships",
+      "item": [
+        {
+          "name": "Add Member to Group",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"member_id\": \"{{member_id}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}/members", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}", "members"] }
+          }
+        },
+        {
+          "name": "List Group Members",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}/members", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}", "members"] }
+          }
+        },
+        {
+          "name": "Count Group Members",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/groups/{{group_id}}/members/count", "host": ["{{base_url}}"], "path": ["api", "v1", "groups", "{{group_id}}", "members", "count"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "06 - Profiles",
+      "item": [
+        {
+          "name": "Upsert Member Profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"date_of_birth\": \"1990-06-15\",\n  \"address\": \"12 MG Road\",\n  \"city\": \"Mumbai\",\n  \"state\": \"Maharashtra\",\n  \"pincode\": \"400001\",\n  \"occupation\": \"Software Engineer\",\n  \"about\": \"Active kitty party member\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}/profile", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}", "profile"] }
+          }
+        },
+        {
+          "name": "Get Member Profile",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}/profile", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}", "profile"] }
+          }
+        },
+        {
+          "name": "Get Profile Summary",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/members/{{member_id}}/profile/summary", "host": ["{{base_url}}"], "path": ["api", "v1", "members", "{{member_id}}", "profile", "summary"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "07 - Kitty Cycles",
+      "item": [
+        {
+          "name": "Schedule Kitty Cycle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('cycle_id', json.data.id);",
+                  "    console.log('cycle_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_id\": \"{{group_id}}\",\n  \"name\": \"2026 Annual Kitty\",\n  \"monthly_amount\": 5000,\n  \"start_date\": \"2026-05-01T00:00:00Z\",\n  \"end_date\": \"2027-04-30T00:00:00Z\",\n  \"notes\": \"Monthly savings cycle\",\n  \"schedule\": [\n    {\n      \"cycle_number\": 1,\n      \"cycle_month\": 5,\n      \"cycle_year\": 2026,\n      \"host_member_id\": \"{{member_id}}\",\n      \"scheduled_date\": \"2026-05-15T18:00:00Z\",\n      \"due_date\": \"2026-05-10T00:00:00Z\",\n      \"venue\": \"Anjali's House\",\n      \"notes\": \"First cycle\"\n    },\n    {\n      \"cycle_number\": 2,\n      \"cycle_month\": 6,\n      \"cycle_year\": 2026,\n      \"host_member_id\": \"{{member_id}}\",\n      \"scheduled_date\": \"2026-06-15T18:00:00Z\",\n      \"due_date\": \"2026-06-10T00:00:00Z\",\n      \"venue\": \"Community Hall\",\n      \"notes\": \"Second cycle\"\n    }\n  ]\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/kitty-cycles/schedule", "host": ["{{base_url}}"], "path": ["api", "v1", "kitty-cycles", "schedule"] }
+          }
+        },
+        {
+          "name": "List Cycles for Group",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/kitty-cycles/groups/{{group_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "kitty-cycles", "groups", "{{group_id}}"] }
+          }
+        },
+        {
+          "name": "Get Cycle by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/kitty-cycles/{{cycle_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "kitty-cycles", "{{cycle_id}}"] }
+          }
+        },
+        {
+          "name": "Start Kitty Cycle",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.status === 'ACTIVE') {",
+                  "    console.log('Cycle started. Status:', json.data.status);",
+                  "    console.log('First schedule status:', json.data.schedule[0].status);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/kitty-cycles/{{cycle_id}}/start", "host": ["{{base_url}}"], "path": ["api", "v1", "kitty-cycles", "{{cycle_id}}", "start"] }
+          }
+        },
+        {
+          "name": "Cancel Cycle",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Cancelled due to group request\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/kitty-cycles/{{cycle_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "kitty-cycles", "{{cycle_id}}", "cancel"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "08 - Contributions",
+      "item": [
+        {
+          "name": "Generate Monthly Dues",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.length > 0) {",
+                  "    pm.collectionVariables.set('due_id', json.data[0].id);",
+                  "    console.log('due_id saved:', json.data[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_id\": \"{{group_id}}\",\n  \"host_member_id\": \"{{member_id}}\",\n  \"cycle_month\": 5,\n  \"cycle_year\": 2026,\n  \"cycle_number\": 1,\n  \"kitty_party_date\": \"2026-05-15T18:00:00Z\",\n  \"due_date\": \"2026-05-10T00:00:00Z\",\n  \"amount\": 5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/contributions/dues/generate", "host": ["{{base_url}}"], "path": ["api", "v1", "contributions", "dues", "generate"] }
+          }
+        },
+        {
+          "name": "List Group Dues",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/contributions/groups/{{group_id}}/dues?cycle_month=5",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "contributions", "groups", "{{group_id}}", "dues"],
+              "query": [{ "key": "cycle_month", "value": "5" }]
+            }
+          }
+        },
+        {
+          "name": "Record Payment",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('payment_id', json.data.id);",
+                  "    console.log('payment_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"due_id\": \"{{due_id}}\",\n  \"amount_paid\": 5000,\n  \"payment_mode\": \"UPI\",\n  \"transaction_ref\": \"UPI123456789\",\n  \"status\": \"SUCCESS\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/contributions/payments", "host": ["{{base_url}}"], "path": ["api", "v1", "contributions", "payments"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "09 - Contribution Tracking",
+      "item": [
+        {
+          "name": "Create Tracking Row",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('tracking_id', json.data.id);",
+                  "    console.log('tracking_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_id\": \"{{group_id}}\",\n  \"member_id\": \"{{member_id}}\",\n  \"due_id\": \"{{due_id}}\",\n  \"cycle_month\": 5,\n  \"cycle_year\": 2026,\n  \"cycle_number\": 1,\n  \"total_due\": 5000\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/contribution-tracking", "host": ["{{base_url}}"], "path": ["api", "v1", "contribution-tracking"] }
+          }
+        },
+        {
+          "name": "Get Tracking by ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/contribution-tracking/{{tracking_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "contribution-tracking", "{{tracking_id}}"] }
+          }
+        },
+        {
+          "name": "Get Tracking by Due ID",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/contribution-tracking/dues/{{due_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "contribution-tracking", "dues", "{{due_id}}"] }
+          }
+        },
+        {
+          "name": "Apply Payment to Tracking",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount_paid\": 5000,\n  \"last_payment_date\": \"2026-05-08T10:30:00Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/contribution-tracking/{{tracking_id}}/payment", "host": ["{{base_url}}"], "path": ["api", "v1", "contribution-tracking", "{{tracking_id}}", "payment"] }
+          }
+        },
+        {
+          "name": "List Tracking by Group",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/contribution-tracking/groups/{{group_id}}?cycle_month=5&cycle_year=2026",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "contribution-tracking", "groups", "{{group_id}}"],
+              "query": [
+                { "key": "cycle_month", "value": "5" },
+                { "key": "cycle_year",  "value": "2026" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Tracking by Member",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/contribution-tracking/members/{{member_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "contribution-tracking", "members", "{{member_id}}"] }
+          }
+        }
+      ]
+    },
+
+    {
+      "name": "10 - Payouts",
+      "item": [
+        {
+          "name": "Schedule Payout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var json = pm.response.json();",
+                  "if (json.success && json.data && json.data.id) {",
+                  "    pm.collectionVariables.set('payout_id', json.data.id);",
+                  "    console.log('payout_id saved:', json.data.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"group_id\": \"{{group_id}}\",\n  \"recipient_id\": \"{{member_id}}\",\n  \"cycle_number\": 1,\n  \"cycle_month\": 5,\n  \"cycle_year\": 2026,\n  \"scheduled_date\": \"2026-05-15T18:00:00Z\",\n  \"pool_amount\": 50000,\n  \"notes\": \"First payout to Anjali\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/payouts/schedule", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "schedule"] }
+          }
+        },
+        {
+          "name": "Record Disbursement",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payout_id\": \"{{payout_id}}\",\n  \"amount_paid\": 50000,\n  \"payment_mode\": \"BANK\",\n  \"transaction_ref\": \"NEFT20260515001\",\n  \"notes\": \"Transferred via NEFT\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/payouts/disburse", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "disburse"] }
+          }
+        },
+        {
+          "name": "List Payouts for Group",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/payouts/groups/{{group_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "groups", "{{group_id}}"] }
+          }
+        },
+        {
+          "name": "List Payouts for Recipient",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/payouts/recipients/{{member_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "recipients", "{{member_id}}"] }
+          }
+        },
+        {
+          "name": "Get Payout by ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/v1/payouts/{{payout_id}}", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "{{payout_id}}"] }
+          }
+        },
+        {
+          "name": "Cancel Payout",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"notes\": \"Cancelled on member request\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": { "raw": "{{base_url}}/api/v1/payouts/{{payout_id}}/cancel", "host": ["{{base_url}}"], "path": ["api", "v1", "payouts", "{{payout_id}}", "cancel"] }
+          }
+        }
+      ]
+    }
+
+  ]
+}
