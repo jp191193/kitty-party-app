@@ -11,5 +11,6 @@ export const STORAGE_KEYS = {
   TOKEN: 'kp.token',
   USER_ID: 'kp.userId',
   USER_NAME: 'kp.userName',
+  GLOBAL_ROLE: 'kp.globalRole',
   API_BASE: 'kp.apiBase',
 };

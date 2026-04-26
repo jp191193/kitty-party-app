@@ -32,6 +32,9 @@ type MembershipRepository interface {
 
 	// GetRole returns the role of a member in a group.
 	GetRole(groupID, memberID string) (string, error)
+
+	// UpdateRole changes a member's role within a group.
+	UpdateRole(groupID, memberID, newRole string) error
 }
 
 // inMemoryMembershipRepository is a thread-safe in-memory implementation.
@@ -126,6 +129,19 @@ func (r *inMemoryMembershipRepository) GetRole(groupID, memberID string) (string
 		}
 	}
 	return "", nil
+}
+
+func (r *inMemoryMembershipRepository) UpdateRole(groupID, memberID, newRole string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	for _, m := range r.memberships {
+		if m.GroupID == groupID && m.MemberID == memberID {
+			m.Role = newRole
+			return nil
+		}
+	}
+	return apperrors.ErrNotFound
 }
 
 // ErrGroupNotFound is returned when the target group does not exist.

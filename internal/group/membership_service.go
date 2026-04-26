@@ -1,13 +1,4 @@
 // Package group – membership service (business-logic) layer.
-//
-// MembershipService enforces all domain rules:
-//   - The target group must exist.
-//   - A member cannot be added twice to the same group.
-//   - A group cannot exceed MaxGroupMembers participants.
-//
-// It depends on both Repository (to validate group existence) and
-// MembershipRepository (to manage membership records). This avoids
-// cross-package coupling while keeping the rules in one place.
 package group
 
 import (
@@ -23,22 +14,29 @@ type MembershipService interface {
 	ListMembers(groupID string) ([]*GroupMembership, error)
 
 	// AddMember validates and records a new member in the group.
-	AddMember(groupID string, executingUserID string, req AddMemberRequest) (*GroupMembership, error)
+	// executingUserGlobalRole is "SuperAdmin" to bypass the role check.
+	AddMember(groupID string, executingUserID string, executingUserGlobalRole string, req AddMemberRequest) (*GroupMembership, error)
 
 	// CountMembers returns the total number of members in a group.
 	CountMembers(groupID string) (int, error)
 
 	// CountAllMembers returns the members count for every individual group.
 	CountAllMembers() ([]GroupMemberCount, error)
+
+	// GetMemberRole returns the calling user's role in a group.
+	GetMemberRole(groupID, memberID string) (string, error)
+
+	// UpdateMemberRole changes a member's role within a group.
+	// Only a group ADMIN or SuperAdmin may perform this action.
+	UpdateMemberRole(groupID, executingUserID, executingUserGlobalRole, targetMemberID, newRole string) error
 }
 
 type membershipService struct {
-	groupRepo      Repository           // used to verify the group exists
-	membershipRepo MembershipRepository // used to manage membership records
+	groupRepo      Repository
+	membershipRepo MembershipRepository
 }
 
 // NewMembershipService constructs a MembershipService.
-// groupRepo is used to confirm the group exists before mutating memberships.
 func NewMembershipService(groupRepo Repository, membershipRepo MembershipRepository) MembershipService {
 	return &membershipService{
 		groupRepo:      groupRepo,
@@ -47,7 +45,6 @@ func NewMembershipService(groupRepo Repository, membershipRepo MembershipReposit
 }
 
 func (s *membershipService) ListMembers(groupID string) ([]*GroupMembership, error) {
-	// Confirm the group exists first so callers receive a proper 404.
 	if _, err := s.groupRepo.FindByID(groupID); err != nil {
 		return nil, err
 	}
@@ -55,7 +52,6 @@ func (s *membershipService) ListMembers(groupID string) ([]*GroupMembership, err
 }
 
 func (s *membershipService) CountMembers(groupID string) (int, error) {
-	// Confirm the group exists first so callers receive a proper 404.
 	if _, err := s.groupRepo.FindByID(groupID); err != nil {
 		return 0, err
 	}
@@ -66,28 +62,28 @@ func (s *membershipService) CountAllMembers() ([]GroupMemberCount, error) {
 	return s.membershipRepo.CountAll()
 }
 
-func (s *membershipService) AddMember(groupID string, executingUserID string, req AddMemberRequest) (*GroupMembership, error) {
+func (s *membershipService) GetMemberRole(groupID, memberID string) (string, error) {
+	return s.membershipRepo.GetRole(groupID, memberID)
+}
+
+func (s *membershipService) AddMember(groupID string, executingUserID string, executingUserGlobalRole string, req AddMemberRequest) (*GroupMembership, error) {
 	// Rule 1 – group must exist.
 	group, err := s.groupRepo.FindByID(groupID)
 	if err != nil {
 		return nil, err
 	}
 
-	// Authorization Check:
-	// 1. executingUserID is the creator of the group
-	// 2. executingUserID is an ADMIN of the group
-	isCreator := group.CreatedBy == executingUserID
-	isAdmin := false
-	
-	if !isCreator {
-		role, _ := s.membershipRepo.GetRole(groupID, executingUserID)
-		if role == "ADMIN" {
-			isAdmin = true
+	// Authorization: SuperAdmin bypasses group-role checks.
+	if executingUserGlobalRole != "SuperAdmin" {
+		isCreator := group.CreatedBy == executingUserID
+		isAdmin := false
+		if !isCreator {
+			role, _ := s.membershipRepo.GetRole(groupID, executingUserID)
+			isAdmin = role == "ADMIN"
 		}
-	}
-
-	if !isCreator && !isAdmin {
-		return nil, apperrors.New(http.StatusForbidden, "Only admin can add members")
+		if !isCreator && !isAdmin {
+			return nil, apperrors.New(http.StatusForbidden, "only group admins can add members")
+		}
 	}
 
 	// Rule 2 – member must not already be in this group.
@@ -112,4 +108,36 @@ func (s *membershipService) AddMember(groupID string, executingUserID string, re
 	}
 
 	return s.membershipRepo.Add(groupID, req.MemberID)
+}
+
+var validGroupRoles = map[string]bool{
+	"ADMIN": true, "TREASURER": true, "MEMBER": true, "VIEWER": true,
+}
+
+func (s *membershipService) UpdateMemberRole(groupID, executingUserID, executingUserGlobalRole, targetMemberID, newRole string) error {
+	if !validGroupRoles[newRole] {
+		return apperrors.New(http.StatusBadRequest, "invalid role: must be ADMIN, TREASURER, MEMBER, or VIEWER")
+	}
+
+	if _, err := s.groupRepo.FindByID(groupID); err != nil {
+		return err
+	}
+
+	// Authorization: SuperAdmin or group ADMIN only.
+	if executingUserGlobalRole != "SuperAdmin" {
+		role, _ := s.membershipRepo.GetRole(groupID, executingUserID)
+		if role != "ADMIN" {
+			return apperrors.New(http.StatusForbidden, "only group admins can change member roles")
+		}
+	}
+
+	exists, err := s.membershipRepo.Exists(groupID, targetMemberID)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return apperrors.ErrNotFound
+	}
+
+	return s.membershipRepo.UpdateRole(groupID, targetMemberID, newRole)
 }

@@ -47,7 +47,7 @@ export async function renderCurrent() {
     const params = match(path, r.path);
     if (params) {
       const query = parseQuery(path);
-      if (beforeRender) beforeRender({ path, params, query });
+      if (beforeRender && beforeRender({ path, params, query }) === false) return;
       main.classList.remove('page-enter');
       // Force reflow so animation re-runs
       void main.offsetWidth;

@@ -1,105 +1,88 @@
-// Bootstraps the app: registers routes, paints the user chip, wires header buttons.
 import { registerRoute, startRouter, currentPath, navigate, onBeforeRender } from './router.js';
 import { store } from './store.js';
 import { api } from './api.js';
 import { toast, openModal, html, escape, initials, readForm } from './ui.js';
 import { API_BASE, STORAGE_KEYS } from './config.js';
 
+import { renderLogin } from './pages/login.js';
 import { renderDashboard } from './pages/dashboard.js';
 import { renderMembers, renderMemberDetail } from './pages/members.js';
 import { renderGroups, renderGroupDetail } from './pages/groups.js';
 import { renderContributions } from './pages/contributions.js';
 import { renderCycles } from './pages/cycles.js';
 import { renderPayouts } from './pages/payouts.js';
+import { renderInvitations } from './pages/invitations.js';
 
 // ── Routes ────────────────────────────────────────────────────────────────
-registerRoute('/',                     renderDashboard);
-registerRoute('/members',              renderMembers);
-registerRoute('/members/:id',          renderMemberDetail);
-registerRoute('/groups',               renderGroups);
-registerRoute('/groups/:id',           renderGroupDetail);
-registerRoute('/contributions',        renderContributions);
-registerRoute('/cycles',               renderCycles);
-registerRoute('/payouts',              renderPayouts);
+registerRoute('/login',              renderLogin);
+registerRoute('/',                   renderDashboard);
+registerRoute('/members',            renderMembers);
+registerRoute('/members/:id',        renderMemberDetail);
+registerRoute('/groups',             renderGroups);
+registerRoute('/groups/:id',         renderGroupDetail);
+registerRoute('/contributions',      renderContributions);
+registerRoute('/cycles',             renderCycles);
+registerRoute('/payouts',            renderPayouts);
+registerRoute('/invitations',        renderInvitations);
 
-// Highlight active nav link on every render
+// ── Route guard + nav highlight ───────────────────────────────────────────
 onBeforeRender(({ path }) => {
+  const isLoginPage = path === '/login';
+  const isLoggedIn  = !!store.token;
+
+  if (!isLoggedIn && !isLoginPage) {
+    navigate('/login');
+    return false;
+  }
+  if (isLoggedIn && isLoginPage) {
+    navigate('/');
+    return false;
+  }
+
+  // Highlight active nav link
   const root = '/' + (path.split('/').filter(Boolean)[0] || '');
   document.querySelectorAll('#mainNav a[data-route]').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === root);
   });
 });
 
-// ── Header user chip ──────────────────────────────────────────────────────
-function paintUserChip() {
-  const label = document.getElementById('currentUserLabel');
+// ── Header: reflect auth state ────────────────────────────────────────────
+function updateHeader() {
+  const isLoggedIn = !!store.token;
+  document.getElementById('mainNav').style.display         = isLoggedIn ? '' : 'none';
+  document.getElementById('currentUserChip').style.display = isLoggedIn ? '' : 'none';
+  document.getElementById('logoutBtn').style.display       = isLoggedIn ? '' : 'none';
+  document.getElementById('settingsBtn').style.display     = isLoggedIn ? '' : 'none';
+
+  const label  = document.getElementById('currentUserLabel');
   const avatar = document.getElementById('currentUserAvatar');
   if (!label || !avatar) return;
   if (store.userName) {
-    label.textContent = store.userName;
+    label.textContent  = store.userName;
     avatar.textContent = initials(store.userName);
   } else {
-    label.textContent = 'No user selected';
+    label.textContent  = 'No user';
     avatar.textContent = '?';
   }
 }
-store.subscribe(paintUserChip);
-paintUserChip();
+store.subscribe(updateHeader);
+updateHeader();
 
-// ── Switch user dialog ────────────────────────────────────────────────────
-async function openSwitchUser() {
-  const wrap = document.createElement('div');
-  wrap.innerHTML = `
-    <p class="text-muted" style="margin-top:0">
-      Some endpoints (creating a profile, adding members to a group) require an authenticated user.
-      Pick an existing member to act as — we'll request a JWT for you.
-    </p>
-    <div class="loader"><div class="spinner"></div><p>Loading members…</p></div>
-  `;
-  const m = openModal({ title: 'Switch acting user', body: wrap });
-  let members = [];
-  try {
-    members = await api.members.list() || [];
-  } catch (e) {
-    wrap.innerHTML = `<p class="text-danger">Could not load members: ${escape(e.message)}</p>`;
-    return;
-  }
-  if (!members.length) {
-    wrap.innerHTML = `
-      <p>No members exist yet. Create one first from the <a href="#/members" data-close>Members</a> page.</p>`;
-    wrap.querySelector('[data-close]').onclick = () => m.close();
-    return;
-  }
+// ── Logout ────────────────────────────────────────────────────────────────
+document.getElementById('logoutBtn').addEventListener('click', async () => {
+  try { await api.auth.logout(); } catch (_) { /* stateless — ignore errors */ }
+  store.clearUser();
+  navigate('/login');
+});
 
-  wrap.innerHTML = `
-    <div class="field">
-      <label for="userPicker">Member</label>
-      <select id="userPicker" class="select">
-        ${members.map((u) => `<option value="${escape(u.id)}" data-name="${escape(u.name)}">${escape(u.name)} — ${escape(u.email || '')}</option>`).join('')}
-      </select>
-      <div class="hint">A bearer token will be issued and stored in your browser's localStorage.</div>
-    </div>
-    <div class="form-actions">
-      <button class="btn btn-secondary" data-act="clear">Clear</button>
-      <button class="btn" data-act="ok">Use this user</button>
-    </div>
-  `;
-  wrap.querySelector('[data-act="clear"]').onclick = () => { store.clearUser(); m.close(); toast('User cleared', { type: 'info' }); };
-  wrap.querySelector('[data-act="ok"]').onclick = async () => {
-    const sel = wrap.querySelector('#userPicker');
-    const id = sel.value;
-    const name = sel.options[sel.selectedIndex].dataset.name;
-    try {
-      const res = await api.auth.token(id);
-      store.setUser({ id, name, token: res.token });
-      m.close();
-      toast(`Acting as ${name}`, { type: 'success' });
-    } catch (e) {
-      toast(e.message, { type: 'error', title: 'Token request failed' });
-    }
-  };
-}
-document.getElementById('switchUserBtn').addEventListener('click', openSwitchUser);
+// ── Global 401 handler ────────────────────────────────────────────────────
+window.addEventListener('auth:unauthorized', () => {
+  // Suppress if already on the login page (e.g. wrong-credentials 401)
+  if (currentPath() === '/login') return;
+  store.clearUser();
+  navigate('/login');
+  toast('Session expired. Please sign in again.', { type: 'error' });
+});
 
 // ── Settings dialog ───────────────────────────────────────────────────────
 document.getElementById('settingsBtn').addEventListener('click', () => {

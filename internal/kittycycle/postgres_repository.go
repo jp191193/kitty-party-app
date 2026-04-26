@@ -370,6 +370,40 @@ func (r *postgresRepository) AssignHost(scheduleID, hostMemberID string) (*Kitty
 	return ks, nil
 }
 
+func (r *postgresRepository) GetGroupIDForSchedule(scheduleID string) (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var groupID string
+	err := r.pool.QueryRow(ctx,
+		`SELECT group_id FROM kitty_schedule WHERE id = $1`, scheduleID,
+	).Scan(&groupID)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", apperrors.ErrNotFound
+		}
+		return "", err
+	}
+	return groupID, nil
+}
+
+func (r *postgresRepository) UpdateScheduledDate(scheduleID string, newDate time.Time) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	tag, err := r.pool.Exec(ctx,
+		`UPDATE kitty_schedule SET scheduled_date = $2, updated_at = NOW() WHERE id = $1`,
+		scheduleID, newDate,
+	)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
+	}
+	return nil
+}
+
 func (r *postgresRepository) ListAssignedHosts(cycleID string) (map[string]bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

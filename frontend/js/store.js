@@ -4,14 +4,18 @@ import { STORAGE_KEYS } from './config.js';
 const listeners = new Set();
 
 export const store = {
-  get token() { return localStorage.getItem(STORAGE_KEYS.TOKEN) || ''; },
-  get userId() { return localStorage.getItem(STORAGE_KEYS.USER_ID) || ''; },
-  get userName() { return localStorage.getItem(STORAGE_KEYS.USER_NAME) || ''; },
+  get token()      { return localStorage.getItem(STORAGE_KEYS.TOKEN)       || ''; },
+  get userId()     { return localStorage.getItem(STORAGE_KEYS.USER_ID)     || ''; },
+  get userName()   { return localStorage.getItem(STORAGE_KEYS.USER_NAME)   || ''; },
+  get globalRole() { return localStorage.getItem(STORAGE_KEYS.GLOBAL_ROLE) || 'User'; },
 
-  setUser({ id, name, token }) {
-    if (id) localStorage.setItem(STORAGE_KEYS.USER_ID, id);
-    if (name) localStorage.setItem(STORAGE_KEYS.USER_NAME, name);
-    if (token) localStorage.setItem(STORAGE_KEYS.TOKEN, token);
+  get isSuperAdmin() { return this.globalRole === 'SuperAdmin'; },
+
+  setUser({ id, name, token, globalRole }) {
+    if (id)         localStorage.setItem(STORAGE_KEYS.USER_ID,     id);
+    if (name)       localStorage.setItem(STORAGE_KEYS.USER_NAME,   name);
+    if (token)      localStorage.setItem(STORAGE_KEYS.TOKEN,       token);
+    if (globalRole) localStorage.setItem(STORAGE_KEYS.GLOBAL_ROLE, globalRole);
     emit();
   },
 
@@ -19,6 +23,7 @@ export const store = {
     localStorage.removeItem(STORAGE_KEYS.TOKEN);
     localStorage.removeItem(STORAGE_KEYS.USER_ID);
     localStorage.removeItem(STORAGE_KEYS.USER_NAME);
+    localStorage.removeItem(STORAGE_KEYS.GLOBAL_ROLE);
     emit();
   },
 

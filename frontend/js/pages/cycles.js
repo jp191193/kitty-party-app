@@ -2,9 +2,10 @@
 import { api } from '../api.js';
 import {
   escape, openModal, toast, confirm, readForm,
-  loadingHtml, errorHtml, fmtDate, fmtMoney, statusBadge,
+  loadingHtml, skeletonTableHtml, errorHtml, fmtDate, fmtMoney, statusBadge, setButtonLoading,
 } from '../ui.js';
 import { openDiceRoller } from '../dice.js';
+import { sendInvitationsForSchedule } from './invitations.js';
 
 export async function renderCycles({ root, query }) {
   root.innerHTML = `
@@ -41,7 +42,18 @@ export async function renderCycles({ root, query }) {
     topActions.innerHTML = `<button class="btn" id="newCycleBtn">+ Schedule cycle</button>`;
     document.getElementById('newCycleBtn').onclick = () => openScheduleCycle(g, () => loadFor(groupId));
 
-    container.innerHTML = loadingHtml('Loading cycles…');
+    container.innerHTML = `<div style="display:flex;flex-direction:column;gap:14px">
+      ${[1,2,3].map(() => `
+        <div class="card">
+          <div class="card-header" style="gap:16px">
+            <div style="flex:1">
+              <div class="skeleton sk-line" style="width:55%;margin-bottom:8px"></div>
+              <div class="skeleton sk-sm" style="width:80%"></div>
+            </div>
+            <div class="skeleton sk-line" style="width:120px;height:30px;border-radius:8px"></div>
+          </div>
+        </div>`).join('')}
+    </div>`;
     try {
       const cycles = (await api.cycles.listByGroup(groupId)) || [];
       paintCycles(container, cycles, groupId, () => loadFor(groupId));
@@ -199,8 +211,7 @@ async function openStartCycle(cycleId, groupId, reload) {
 
   const confirmBtn = wrap.querySelector('#confirmStartBtn');
   confirmBtn.onclick = async () => {
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = 'Starting…';
+    setButtonLoading(confirmBtn, true);
     try {
       const result = await api.cycles.start(cycleId);
       m.close();
@@ -208,8 +219,7 @@ async function openStartCycle(cycleId, groupId, reload) {
       reload();
     } catch (e) {
       toast(e.message, { type: 'error', title: 'Start failed' });
-      confirmBtn.disabled = false;
-      confirmBtn.textContent = 'Start cycle';
+      setButtonLoading(confirmBtn, false);
     }
   };
 }
@@ -277,7 +287,7 @@ function showActivationResult(result, hostName) {
 
 async function openCycleSchedule(cycleId) {
   const wrap = document.createElement('div');
-  wrap.innerHTML = loadingHtml('Loading schedule…');
+  wrap.innerHTML = skeletonTableHtml(5, ['40px', '12%', '22%', '14%', '14%', '12%', '10%', '120px']);
   const m = openModal({ title: 'Cycle schedule', body: wrap, size: 'lg' });
 
   async function paint() {
@@ -308,10 +318,14 @@ async function openCycleSchedule(cycleId) {
           const hostCell = s.host_member_id
             ? `<a href="#/members/${escape(s.host_member_id)}">${escape(memberMap[s.host_member_id] || s.host_member_id.slice(0, 8))}</a>`
             : `<span class="dice-host-pill unrolled"><span class="dot"></span>To be rolled</span>`;
-            debugger;
+
           const canRoll = !s.host_member_id && s.status !== 'CANCELLED' && s.status !== 'COMPLETED';
-          const action = canRoll
+          const rollBtn = canRoll
             ? `<button class="btn btn-sm" data-roll="${escape(s.id)}" data-cycle-num="${escape(s.cycle_number)}" data-cycle-month="${escape(s.cycle_month)}" data-cycle-year="${escape(s.cycle_year)}">🎲 Roll dice</button>`
+            : '';
+          const canInvite = s.status !== 'CANCELLED' && s.status !== 'COMPLETED';
+          const inviteBtn = canInvite
+            ? `<button class="btn btn-sm btn-secondary" data-invite="${escape(s.id)}">✉ Invite</button>`
             : '';
           return `
             <tr>
@@ -322,10 +336,9 @@ async function openCycleSchedule(cycleId) {
               <td class="text-muted">${fmtDate(s.due_date)}</td>
               <td>${fmtMoney(s.pool_amount)}</td>
               <td>${statusBadge(s.status)}</td>
-              <td class="text-right">${action}</td>
+              <td class="text-right" style="white-space:nowrap">${rollBtn} ${inviteBtn}</td>
             </tr>`;
         }).join('')}</tbody></table></div>`;
-    debugger;
     wrap.querySelectorAll('[data-roll]').forEach((btn) => {
       btn.onclick = () => {
         const candidates = (members || []).filter((mem) => !takenIds.has(mem.member_id));
@@ -339,6 +352,17 @@ async function openCycleSchedule(cycleId) {
           candidates,
           onAssigned: () => paint(),
         });
+      };
+    });
+
+    wrap.querySelectorAll('[data-invite]').forEach((btn) => {
+      btn.onclick = async () => {
+        setButtonLoading(btn, true);
+        try {
+          await sendInvitationsForSchedule(btn.dataset.invite);
+        } finally {
+          setButtonLoading(btn, false);
+        }
       };
     });
   }
@@ -449,14 +473,14 @@ function openScheduleCycle(group, onSaved) {
       schedule,
     };
     const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true;
+    setButtonLoading(btn, true);
     try {
       await api.cycles.schedule(payload);
       toast('Cycle scheduled — roll the dice when you\'re ready to pick each host.', { type: 'success' });
       m.close(); onSaved?.();
     } catch (err) {
       toast(err.message, { type: 'error', title: 'Schedule failed' });
-    } finally { btn.disabled = false; }
+    } finally { setButtonLoading(btn, false); }
   };
 }
 

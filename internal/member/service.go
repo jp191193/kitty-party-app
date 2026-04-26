@@ -1,6 +1,8 @@
 // Package member – service (business-logic) layer.
 package member
 
+import "golang.org/x/crypto/bcrypt"
+
 // Service defines the use-case contract for the Member domain.
 type Service interface {
 	GetAll() ([]*Member, error)
@@ -28,6 +30,11 @@ func (s *service) GetByID(id string) (*Member, error) {
 }
 
 func (s *service) Create(req CreateMemberRequest) (*Member, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, err
+	}
+	req.PasswordHash = string(hash)
 	return s.repo.Create(req)
 }
 

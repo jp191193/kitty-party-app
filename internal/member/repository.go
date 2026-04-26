@@ -13,6 +13,7 @@ import (
 type Repository interface {
 	FindAll() ([]*Member, error)
 	FindByID(id string) (*Member, error)
+	FindByEmail(email string) (*Credentials, error)
 	Create(req CreateMemberRequest) (*Member, error)
 	Update(id string, req UpdateMemberRequest) (*Member, error)
 	Delete(id string) error
@@ -62,6 +63,18 @@ func (r *inMemoryRepository) FindByID(id string) (*Member, error) {
 		return nil, apperrors.ErrNotFound
 	}
 	return m, nil
+}
+
+func (r *inMemoryRepository) FindByEmail(email string) (*Credentials, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	for _, m := range r.members {
+		if m.Email == email {
+			return &Credentials{Member: m, PasswordHash: ""}, nil
+		}
+	}
+	return nil, apperrors.ErrNotFound
 }
 
 func (r *inMemoryRepository) Create(req CreateMemberRequest) (*Member, error) {

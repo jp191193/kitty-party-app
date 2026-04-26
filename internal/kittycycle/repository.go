@@ -1,6 +1,8 @@
 // Package kittycycle – repository layer.
 package kittycycle
 
+import "time"
+
 // Repository defines the persistence contract for KittyCycle and KittySchedule.
 type Repository interface {
 	// CreateCycleWithSchedule atomically inserts a kitty_cycle row and all
@@ -35,4 +37,12 @@ type Repository interface {
 	// ListAssignedHosts returns the set of host_member_ids already chosen
 	// for a cycle (used to exclude them from the dice roll).
 	ListAssignedHosts(cycleID string) (map[string]bool, error)
+
+	// GetGroupIDForSchedule returns the group_id for a kitty_schedule entry.
+	// Used by invitation and date-proposal domains via adapter.
+	GetGroupIDForSchedule(scheduleID string) (string, error)
+
+	// UpdateScheduledDate sets a new scheduled_date on a kitty_schedule entry.
+	// Used when a date proposal is accepted.
+	UpdateScheduledDate(scheduleID string, newDate time.Time) error
 }

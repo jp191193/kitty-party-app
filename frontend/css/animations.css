@@ -8,13 +8,23 @@
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(16px); }
+  from { opacity: 0; transform: translateX(24px); }
   to   { opacity: 1; transform: translateX(0); }
 }
 
+@keyframes slideOutRight {
+  from { opacity: 1; transform: translateX(0); }
+  to   { opacity: 0; transform: translateX(24px); }
+}
+
 @keyframes modalIn {
-  from { opacity: 0; transform: translateY(-8px) scale(0.98); }
+  from { opacity: 0; transform: translateY(-10px) scale(0.97); }
   to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes modalOut {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to   { opacity: 0; transform: translateY(6px) scale(0.97); }
 }
 
 @keyframes backdropIn {
@@ -22,21 +32,55 @@
   to   { opacity: 1; }
 }
 
+@keyframes backdropOut {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
 @keyframes rowIn {
-  from { opacity: 0; transform: translateY(2px); }
+  from { opacity: 0; transform: translateY(3px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
+@keyframes shimmer {
+  from { background-position: -200% 0; }
+  to   { background-position:  200% 0; }
+}
+
+@keyframes ripple {
+  from { transform: scale(0); opacity: 0.5; }
+  to   { transform: scale(4); opacity: 0; }
+}
+
+@keyframes toastProgress {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+
+@keyframes fieldError {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-3px); }
+  75%       { transform: translateX(3px); }
+}
+
+@keyframes checkPop {
+  0%   { transform: scale(0) rotate(-10deg); opacity: 0; }
+  60%  { transform: scale(1.2) rotate(3deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
 /* Page transitions */
-.page-enter { animation: fadeIn 180ms ease-out; }
+.page-enter { animation: fadeIn 200ms ease-out; }
 
 /* Toast */
-.toast { animation: slideInRight 200ms ease-out; }
-.toast.hide { animation: slideInRight 180ms ease-in reverse; }
+.toast { animation: slideInRight 220ms cubic-bezier(.22,.68,0,1.2); }
+.toast.hide { animation: slideOutRight 180ms ease-in forwards; }
 
 /* Modal */
 .modal-backdrop { animation: backdropIn 160ms ease-out; }
-.modal { animation: modalIn 200ms ease-out; }
+.modal-backdrop.closing { animation: backdropOut 180ms ease-in forwards; }
+.modal { animation: modalIn 220ms cubic-bezier(.22,.68,0,1.2); }
+.modal.closing { animation: modalOut 180ms ease-in forwards; }
 
 /* Table rows stagger (only on initial render via inline animation-delay) */
 .data-table tbody tr.anim { animation: rowIn 200ms ease-out both; }

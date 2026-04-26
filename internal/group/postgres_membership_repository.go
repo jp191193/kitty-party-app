@@ -134,14 +134,30 @@ func (r *postgresMembershipRepository) GetRole(groupID, memberID string) (string
 	defer cancel()
 
 	query := `SELECT role FROM group_memberships WHERE group_id = $1 AND member_id = $2;`
-	
+
 	var role string
 	err := r.pool.QueryRow(ctx, query, groupID, memberID).Scan(&role)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", nil 
+			return "", nil
 		}
 		return "", err
 	}
 	return role, nil
+}
+
+func (r *postgresMembershipRepository) UpdateRole(groupID, memberID, newRole string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	query := `UPDATE group_memberships SET role = $1 WHERE group_id = $2 AND member_id = $3;`
+
+	cmdTag, err := r.pool.Exec(ctx, query, newRole, groupID, memberID)
+	if err != nil {
+		return err
+	}
+	if cmdTag.RowsAffected() == 0 {
+		return apperrors.ErrNotFound
+	}
+	return nil
 }

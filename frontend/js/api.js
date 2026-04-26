@@ -45,6 +45,9 @@ async function request(path, { method = 'GET', body, query, auth = false } = {})
   }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'));
+    }
     const msg = payload?.error?.message || payload?.message || res.statusText || 'Request failed';
     throw new ApiError(msg, { status: res.status, code: payload?.error?.code, payload });
   }
@@ -60,7 +63,8 @@ export const api = {
 
   // ─── Auth ──
   auth: {
-    token: (userId) => request('/api/v1/auth/token', { method: 'POST', body: { user_id: userId } }),
+    login:  (data) => request('/api/v1/auth/login',  { method: 'POST', body: data }),
+    logout: ()     => request('/api/v1/auth/logout', { method: 'POST' }),
   },
 
   // ─── Members ──
@@ -87,11 +91,14 @@ export const api = {
     update: (id, data) => request(`/api/v1/groups/${id}`, { method: 'PUT', body: data }),
     remove: (id) => request(`/api/v1/groups/${id}`, { method: 'DELETE' }),
     memberCounts: () => request('/api/v1/groups-member-counts'),
+    myRole: (groupId) => request(`/api/v1/groups/${groupId}/my-role`, { auth: true }),
     members: {
       list: (groupId) => request(`/api/v1/groups/${groupId}/members`),
       add: (groupId, memberId) =>
         request(`/api/v1/groups/${groupId}/members`, { method: 'POST', body: { member_id: memberId }, auth: true }),
       count: (groupId) => request(`/api/v1/groups/${groupId}/members/count`),
+      updateRole: (groupId, memberId, role) =>
+        request(`/api/v1/groups/${groupId}/members/${memberId}/role`, { method: 'PATCH', body: { role }, auth: true }),
     },
   },
 
@@ -130,5 +137,25 @@ export const api = {
     start: (id) => request(`/api/v1/kitty-cycles/${id}/start`, { method: 'PATCH', auth: true }),
     cancel: (id, notes) => request(`/api/v1/kitty-cycles/${id}/cancel`, { method: 'PATCH', body: { notes }, auth: true }),
     rollHost: (scheduleId) => request(`/api/v1/kitty-cycles/schedule-entries/${scheduleId}/roll-host`, { method: 'POST', auth: true }),
+  },
+
+  // ─── Schedule Invitations ──
+  invitations: {
+    send: (scheduleId) =>
+      request(`/api/v1/kitty-cycles/schedule-entries/${scheduleId}/invitations`, { method: 'POST', auth: true }),
+    listBySchedule: (scheduleId) =>
+      request(`/api/v1/kitty-cycles/schedule-entries/${scheduleId}/invitations`, { auth: true }),
+    my: () => request('/api/v1/invitations/my', { auth: true }),
+    accept: (id) => request(`/api/v1/invitations/${id}/accept`, { method: 'PATCH', auth: true }),
+    proposeDate: (id) => request(`/api/v1/invitations/${id}/propose-date`, { method: 'PATCH', auth: true }),
+  },
+
+  // ─── Date Proposals ──
+  proposals: {
+    create: (data) => request('/api/v1/date-proposals', { method: 'POST', body: data, auth: true }),
+    get: (id) => request(`/api/v1/date-proposals/${id}`, { auth: true }),
+    listBySchedule: (scheduleId) => request(`/api/v1/date-proposals/schedule/${scheduleId}`, { auth: true }),
+    vote: (id, vote) => request(`/api/v1/date-proposals/${id}/votes`, { method: 'POST', body: { vote }, auth: true }),
+    accept: (id) => request(`/api/v1/date-proposals/${id}/accept`, { method: 'PATCH', auth: true }),
   },
 };

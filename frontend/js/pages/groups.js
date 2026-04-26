@@ -47,6 +47,9 @@ export async function renderGroups({ root }) {
       </div>`;
       return;
     }
+
+    const isSuperAdmin = store.isSuperAdmin;
+
     container.innerHTML = `
       <div class="table-wrap"><table class="data-table">
         <thead><tr>
@@ -56,6 +59,7 @@ export async function renderGroups({ root }) {
         <tbody>${filtered.map((g) => {
           const members = counts[g.id] ?? '—';
           const pool = (g.monthly_amount || 0) * (g.duration || 0);
+          const canManage = isSuperAdmin || g.created_by === store.userId;
           return `<tr>
             <td><a href="#/groups/${escape(g.id)}"><strong>${escape(g.name)}</strong></a>
                 <div class="text-muted mono">${escape(g.id.slice(0, 8))}</div></td>
@@ -66,8 +70,8 @@ export async function renderGroups({ root }) {
             <td class="text-muted">${fmtDate(g.start_date)}</td>
             <td class="actions">
               <a class="btn btn-secondary btn-sm" href="#/groups/${escape(g.id)}">Open</a>
-              <button class="btn btn-secondary btn-sm" data-edit="${escape(g.id)}">Edit</button>
-              <button class="btn btn-danger btn-sm" data-del="${escape(g.id)}">Delete</button>
+              ${canManage ? `<button class="btn btn-secondary btn-sm" data-edit="${escape(g.id)}">Edit</button>` : ''}
+              ${canManage ? `<button class="btn btn-danger btn-sm" data-del="${escape(g.id)}">Delete</button>` : ''}
             </td>
           </tr>`;
         }).join('')}</tbody></table></div>`;
@@ -94,7 +98,6 @@ function openGroupForm(group, onSaved) {
   const isEdit = !!group;
   const wrap = document.createElement('div');
 
-  // For create we need a creator member id. Try the acting user first; otherwise let them pick.
   wrap.innerHTML = `
     <form id="groupForm">
       <div class="form-grid">
@@ -153,7 +156,6 @@ function toDtLocal(iso) {
   if (!iso) return '';
   const d = new Date(iso);
   if (isNaN(d)) return '';
-  // Convert to local YYYY-MM-DDTHH:MM expected by datetime-local
   const tz = d.getTimezoneOffset();
   const local = new Date(d.getTime() - tz * 60000);
   return local.toISOString().slice(0, 16);
@@ -174,25 +176,33 @@ export async function renderGroupDetail({ root, params }) {
     <div id="groupBody">${loadingHtml()}</div>
   `;
 
-  let group, members = [];
+  let group, members = [], myRole = '';
   try {
     [group, members] = await Promise.all([
       api.groups.get(id),
       api.groups.members.list(id).catch(() => []),
     ]);
+    // Fetch calling user's role in this group (ignore errors – user may not be a member)
+    const roleRes = await api.groups.myRole(id).catch(() => null);
+    myRole = roleRes?.role || '';
   } catch (e) {
     root.querySelector('#groupBody').innerHTML = errorHtml(e.message);
     return;
   }
 
+  const isSuperAdmin = store.isSuperAdmin;
+  const isGroupAdmin = isSuperAdmin || myRole === 'ADMIN' || group.created_by === store.userId;
+
   document.getElementById('groupName').textContent = group.name;
   document.getElementById('groupMeta').innerHTML =
-    `<span>${fmtMoney(group.monthly_amount)}/month</span> · <span>${escape(group.duration)} months</span> · <span>Starts ${fmtDate(group.start_date)}</span>`;
+    `<span>${fmtMoney(group.monthly_amount)}/month</span> · <span>${escape(group.duration)} months</span> · <span>Starts ${fmtDate(group.start_date)}</span>` +
+    (myRole ? ` · <span class="badge">${escape(myRole)}</span>` : '');
+
   document.getElementById('groupActions').innerHTML = `
     <a class="btn btn-secondary" href="#/contributions?group=${escape(id)}">Contributions</a>
     <a class="btn btn-secondary" href="#/cycles?group=${escape(id)}">Cycles</a>
     <a class="btn btn-secondary" href="#/payouts?group=${escape(id)}">Payouts</a>
-    <button class="btn" id="addMemberBtn">+ Add member</button>
+    ${isGroupAdmin ? `<button class="btn" id="addMemberBtn">+ Add member</button>` : ''}
   `;
 
   const pool = (group.monthly_amount || 0) * (group.duration || 0);
@@ -205,11 +215,23 @@ export async function renderGroupDetail({ root, params }) {
     </div>
     <div class="card">
       <div class="card-header"><h3>Members in this group</h3></div>
-      ${renderMembersTable(members)}
+      ${renderMembersTable(members, isGroupAdmin)}
     </div>
   `;
 
-  document.getElementById('addMemberBtn').onclick = () => openAddMember(id, () => renderGroupDetail({ root, params }));
+  document.getElementById('addMemberBtn')?.addEventListener('click', () =>
+    openAddMember(id, () => renderGroupDetail({ root, params })));
+
+  // Wire up role-change buttons if the user can manage roles
+  if (isGroupAdmin) {
+    root.querySelectorAll('[data-change-role]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const memberId = btn.dataset.changeRole;
+        const member = members.find((m) => m.member_id === memberId);
+        openChangeRoleForm(id, memberId, member?.role || '', () => renderGroupDetail({ root, params }));
+      });
+    });
+  }
 }
 
 function stat(label, value) {
@@ -219,7 +241,7 @@ function stat(label, value) {
   </div>`;
 }
 
-function renderMembersTable(members) {
+function renderMembersTable(members, canManageRoles) {
   if (!members.length) {
     return `<div class="empty">
       <div class="empty-title">No members yet</div>
@@ -227,20 +249,21 @@ function renderMembersTable(members) {
     </div>`;
   }
   return `<div class="table-wrap"><table class="data-table">
-    <thead><tr><th>Member</th><th>Role</th><th>Status</th><th>Joined</th></tr></thead>
+    <thead><tr><th>Member</th><th>Role</th><th>Status</th><th>Joined</th>${canManageRoles ? '<th></th>' : ''}</tr></thead>
     <tbody>${members.map((m) => `
       <tr>
         <td><a href="#/members/${escape(m.member_id)}">${escape(m.member_name || m.member_id)}</a></td>
         <td>${statusBadge(m.role)}</td>
         <td>${statusBadge(m.status)}</td>
         <td class="text-muted">${fmtDate(m.joined_at)}</td>
+        ${canManageRoles ? `<td class="actions"><button class="btn btn-secondary btn-sm" data-change-role="${escape(m.member_id)}">Change role</button></td>` : ''}
       </tr>`).join('')}
     </tbody></table></div>`;
 }
 
 function openAddMember(groupId, onSaved) {
   if (!store.token) {
-    toast('Switch to the group creator (header → Switch) before adding members.', { type: 'warning', title: 'Login required', duration: 5000 });
+    toast('You must be logged in to add members.', { type: 'warning', title: 'Login required', duration: 5000 });
     return;
   }
   const wrap = document.createElement('div');
@@ -250,7 +273,7 @@ function openAddMember(groupId, onSaved) {
         <select class="select" name="member_id" required>
           <option value="">Loading members…</option>
         </select>
-        <div class="hint">Only the group creator can add members.</div>
+        <div class="hint">Only group admins can add members.</div>
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-secondary" data-act="cancel">Cancel</button>
@@ -276,6 +299,39 @@ function openAddMember(groupId, onSaved) {
       m.close(); onSaved?.();
     } catch (err) {
       toast(err.message, { type: 'error', title: 'Add failed' });
+    } finally { btn.disabled = false; }
+  };
+}
+
+function openChangeRoleForm(groupId, memberId, currentRole, onSaved) {
+  const roles = ['ADMIN', 'TREASURER', 'MEMBER', 'VIEWER'];
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <form id="changeRoleForm">
+      <div class="field">
+        <label>New role</label>
+        <select class="select" name="role" required>
+          ${roles.map((r) => `<option value="${r}" ${r === currentRole ? 'selected' : ''}>${r}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-actions">
+        <button type="button" class="btn btn-secondary" data-act="cancel">Cancel</button>
+        <button type="submit" class="btn">Save role</button>
+      </div>
+    </form>`;
+  const m = openModal({ title: 'Change member role', body: wrap });
+  wrap.querySelector('[data-act="cancel"]').onclick = () => m.close();
+  wrap.querySelector('#changeRoleForm').onsubmit = async (e) => {
+    e.preventDefault();
+    const { role } = readForm(e.target);
+    const btn = e.target.querySelector('button[type=submit]');
+    btn.disabled = true;
+    try {
+      await api.groups.members.updateRole(groupId, memberId, role);
+      toast('Role updated', { type: 'success' });
+      m.close(); onSaved?.();
+    } catch (err) {
+      toast(err.message, { type: 'error', title: 'Update failed' });
     } finally { btn.disabled = false; }
   };
 }

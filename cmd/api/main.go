@@ -13,13 +13,16 @@ import (
 	"kitty-party-app/internal/contribution"
 	"kitty-party-app/internal/contributiontracking"
 	"kitty-party-app/internal/database"
+	"kitty-party-app/internal/dateproposal"
 	"kitty-party-app/internal/group"
 	"kitty-party-app/internal/kittycycle"
 	"kitty-party-app/internal/logger"
 	"kitty-party-app/internal/member"
+	"kitty-party-app/internal/middleware"
 	"kitty-party-app/internal/payout"
 	"kitty-party-app/internal/profile"
 	"kitty-party-app/internal/router"
+	"kitty-party-app/internal/scheduleinvitation"
 	"kitty-party-app/internal/server"
 
 	"go.uber.org/zap"
@@ -49,6 +52,59 @@ func (a *contributionDuesGenAdapter) GenerateDues(ctx context.Context,
 		return 0, err
 	}
 	return len(dues), nil
+}
+
+// scheduleQuerierAdapter implements scheduleinvitation.ScheduleQuerier via kittycycle.Repository.
+type scheduleQuerierAdapter struct {
+	repo kittycycle.Repository
+}
+
+func (a *scheduleQuerierAdapter) GetGroupIDForSchedule(scheduleID string) (string, error) {
+	return a.repo.GetGroupIDForSchedule(scheduleID)
+}
+
+// dateProposalScheduleAdapter implements dateproposal.ScheduleInfoProvider.
+type dateProposalScheduleAdapter struct {
+	cycleRepo      kittycycle.Repository
+	membershipRepo group.MembershipRepository
+	groupRepo      group.Repository
+}
+
+func (a *dateProposalScheduleAdapter) GetGroupIDForSchedule(scheduleID string) (string, error) {
+	return a.cycleRepo.GetGroupIDForSchedule(scheduleID)
+}
+
+func (a *dateProposalScheduleAdapter) GetGroupMemberCount(groupID string) (int, error) {
+	memberships, err := a.membershipRepo.ListByGroup(groupID)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, m := range memberships {
+		if m.Status == "" || m.Status == "ACTIVE" {
+			count++
+		}
+	}
+	return count, nil
+}
+
+func (a *dateProposalScheduleAdapter) UpdateScheduledDate(scheduleID string, newDate time.Time) error {
+	return a.cycleRepo.UpdateScheduledDate(scheduleID, newDate)
+}
+
+func (a *dateProposalScheduleAdapter) IsAdminOrCreator(groupID, callerID string) (bool, error) {
+	g, err := a.groupRepo.FindByID(groupID)
+	if err != nil {
+		return false, err
+	}
+	if g.CreatedBy == callerID {
+		return true, nil
+	}
+	role, err := a.membershipRepo.GetRole(groupID, callerID)
+	if err != nil {
+		return false, err
+	}
+	return role == "ADMIN", nil
 }
 
 // payoutSchedulerAdapter adapts payout.Service to kittycycle.PayoutScheduler.
@@ -95,6 +151,8 @@ func main() {
 		zap.String("port", cfg.Port),
 	)
 
+	middleware.JWTSecret = []byte(cfg.JWTSecret)
+
 	// ── 3. Initialize Database ───────────────────────────────────────────────
 	dbPool, err := database.NewPostgresPool(context.Background(), cfg.DatabaseURL)
 	if err != nil {
@@ -118,7 +176,7 @@ func main() {
 	// groupRepo is shared so the membership service can validate group existence.
 	membershipRepo := group.NewPostgresMembershipRepository(dbPool)
 	membershipSvc := group.NewMembershipService(groupRepo, membershipRepo)
-	membershipHandler := group.NewMembershipHandler(membershipSvc)
+	membershipHandler := group.NewMembershipHandler(membershipSvc, membershipRepo)
 
 	// Contribution domain
 	contributionRepo := contribution.NewPostgresRepository(dbPool)
@@ -149,6 +207,25 @@ func main() {
 	)
 	kittyCycleHandler := kittycycle.NewHandler(kittyCycleSvc)
 
+	// Schedule Invitation domain
+	invitationRepo := scheduleinvitation.NewPostgresRepository(dbPool)
+	scheduleQuerier := &scheduleQuerierAdapter{repo: kittyCycleRepo}
+	invitationGroupProvider := scheduleinvitation.NewGroupInfoProviderAdapter(
+		scheduleQuerier, groupRepo, membershipRepo,
+	)
+	invitationSvc := scheduleinvitation.NewService(invitationRepo, invitationGroupProvider)
+	invitationHandler := scheduleinvitation.NewHandler(invitationSvc)
+
+	// Date Proposal domain
+	proposalRepo := dateproposal.NewPostgresRepository(dbPool)
+	proposalScheduleProvider := &dateProposalScheduleAdapter{
+		cycleRepo:      kittyCycleRepo,
+		membershipRepo: membershipRepo,
+		groupRepo:      groupRepo,
+	}
+	proposalSvc := dateproposal.NewService(proposalRepo, proposalScheduleProvider)
+	proposalHandler := dateproposal.NewHandler(proposalSvc)
+
 	// Member Profile domain
 	profileRepo := profile.NewPostgresRepository(dbPool)
 	memberChecker := profile.NewMemberChecker(memberRepo)
@@ -156,20 +233,22 @@ func main() {
 	profileHandler := profile.NewHandler(profileSvc)
 
 	// Auth domain
-	authHandler := auth.NewHandler()
+	authHandler := auth.NewHandler(memberRepo)
 
 	// ── 5. Build router ──────────────────────────────────────────────────────
 	r := router.New(router.Options{
-		Logger:              l,
-		AuthHandler:         authHandler,
-		MemberHandler:       memberHandler,
-		GroupHandler:        groupHandler,
-		MembershipHandler:   membershipHandler,
-		ContributionHandler: contributionHandler,
-		TrackingHandler:     trackingHandler,
-		ProfileHandler:      profileHandler,
-		PayoutHandler:       payoutHandler,
-		KittyCycleHandler:   kittyCycleHandler,
+		Logger:                    l,
+		AuthHandler:               authHandler,
+		MemberHandler:             memberHandler,
+		GroupHandler:              groupHandler,
+		MembershipHandler:         membershipHandler,
+		ContributionHandler:       contributionHandler,
+		TrackingHandler:           trackingHandler,
+		ProfileHandler:            profileHandler,
+		PayoutHandler:             payoutHandler,
+		KittyCycleHandler:         kittyCycleHandler,
+		ScheduleInvitationHandler: invitationHandler,
+		DateProposalHandler:       proposalHandler,
 	})
 
 	// ── 6. Start server ──────────────────────────────────────────────────────

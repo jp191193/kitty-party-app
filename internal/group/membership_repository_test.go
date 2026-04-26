@@ -95,7 +95,7 @@ func TestMembershipService_AddMember_HappyPath(t *testing.T) {
 	svc, gRepo := newMembershipService()
 	g := seedGroup(t, gRepo)
 
-	m, err := svc.AddMember(g.ID, "organiser-001", group.AddMemberRequest{MemberID: "mem-001"})
+	m, err := svc.AddMember(g.ID, "organiser-001", "User", group.AddMemberRequest{MemberID: "mem-001"})
 	if err != nil {
 		t.Fatalf("AddMember: %v", err)
 	}
@@ -107,7 +107,7 @@ func TestMembershipService_AddMember_HappyPath(t *testing.T) {
 func TestMembershipService_AddMember_GroupNotFound(t *testing.T) {
 	svc, _ := newMembershipService()
 
-	_, err := svc.AddMember("non-existent-group", "user1", group.AddMemberRequest{MemberID: "mem-001"})
+	_, err := svc.AddMember("non-existent-group", "user1", "User", group.AddMemberRequest{MemberID: "mem-001"})
 	if err == nil {
 		t.Fatal("expected error for unknown group, got nil")
 	}
@@ -117,8 +117,8 @@ func TestMembershipService_AddMember_Duplicate(t *testing.T) {
 	svc, gRepo := newMembershipService()
 	g := seedGroup(t, gRepo)
 
-	_, _ = svc.AddMember(g.ID, "organiser-001", group.AddMemberRequest{MemberID: "mem-dup"})
-	_, err := svc.AddMember(g.ID, "organiser-001", group.AddMemberRequest{MemberID: "mem-dup"})
+	_, _ = svc.AddMember(g.ID, "organiser-001", "User", group.AddMemberRequest{MemberID: "mem-dup"})
+	_, err := svc.AddMember(g.ID, "organiser-001", "User", group.AddMemberRequest{MemberID: "mem-dup"})
 	if err == nil {
 		t.Fatal("expected conflict error for duplicate member, got nil")
 	}
@@ -129,13 +129,13 @@ func TestMembershipService_AddMember_MaxCapacity(t *testing.T) {
 	g := seedGroup(t, gRepo)
 
 	for i := 0; i < group.MaxGroupMembers; i++ {
-		if _, err := svc.AddMember(g.ID, "organiser-001", group.AddMemberRequest{MemberID: fmt.Sprintf("mem-%d", i)}); err != nil {
+		if _, err := svc.AddMember(g.ID, "organiser-001", "User", group.AddMemberRequest{MemberID: fmt.Sprintf("mem-%d", i)}); err != nil {
 			t.Fatalf("AddMember #%d: %v", i, err)
 		}
 	}
 
 	// The (MaxGroupMembers+1)th addition must fail.
-	_, err := svc.AddMember(g.ID, "organiser-001", group.AddMemberRequest{MemberID: "mem-overflow"})
+	_, err := svc.AddMember(g.ID, "organiser-001", "User", group.AddMemberRequest{MemberID: "mem-overflow"})
 	if err == nil {
 		t.Fatalf("expected full-group error, got nil")
 	}

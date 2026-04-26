@@ -10,10 +10,11 @@ import (
 
 // Config holds all application configuration.
 type Config struct {
-	AppName string
+	AppName     string
 	AppEnv      string
 	Port        string
 	DatabaseURL string
+	JWTSecret   string
 }
 
 // Load reads the .env file (if present) and returns a populated Config.
@@ -29,11 +30,11 @@ func Load() (*Config, error) {
 	dbName := getEnv("DB_NAME", "kitty_party")
 
 	cfg := &Config{
-		AppName: getEnv("APP_NAME", "kitty-party-app"),
-		AppEnv:  getEnv("APP_ENV", "development"),
-		Port:    getEnv("APP_PORT", "8080"),
-		DatabaseURL: fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", 
-			dbUser, dbPass, dbHost, dbPort, dbName),
+		AppName:     getEnv("APP_NAME", "kitty-party-app"),
+		AppEnv:      getEnv("APP_ENV", "development"),
+		Port:        getEnv("APP_PORT", "8080"),
+		DatabaseURL: fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=disable", dbUser, dbPass, dbHost, dbPort, dbName),
+		JWTSecret:   getEnv("JWT_SECRET", "super_secret_key"),
 	}
 
 	if cfg.Port == "" {

@@ -2,7 +2,6 @@
 // status badges, common empty/loading states, and a tiny form helper.
 
 export function html(strings, ...values) {
-  // Tagged template that returns a string. Values are NOT auto-escaped — use escape() for user data.
   let out = '';
   strings.forEach((s, i) => {
     out += s;
@@ -28,18 +27,34 @@ export function escape(s) {
 export function toast(message, { type = 'info', title, duration = 3500 } = {}) {
   const root = document.getElementById('toastContainer');
   if (!root) { console.log(`[${type}]`, title || '', message); return; }
+
   const el = document.createElement('div');
   el.className = `toast ${type}`;
+  el.style.setProperty('--toast-duration', `${duration}ms`);
   el.innerHTML =
+    `<div class="toast-content">` +
     (title ? `<div class="toast-title">${escape(title)}</div>` : '') +
-    `<div>${escape(message)}</div>`;
+    `<div>${escape(message)}</div></div>` +
+    `<button class="toast-close" aria-label="Dismiss">×</button>` +
+    `<div class="toast-progress"></div>`;
+
   root.appendChild(el);
+
   const remove = () => {
+    if (el._removing) return;
+    el._removing = true;
     el.classList.add('hide');
     setTimeout(() => el.remove(), 200);
   };
-  setTimeout(remove, duration);
-  el.addEventListener('click', remove);
+
+  const timer = setTimeout(remove, duration);
+  el.querySelector('.toast-close').addEventListener('click', () => { clearTimeout(timer); remove(); });
+  el.addEventListener('mouseenter', () => {
+    el.querySelector('.toast-progress').style.animationPlayState = 'paused';
+  });
+  el.addEventListener('mouseleave', () => {
+    el.querySelector('.toast-progress').style.animationPlayState = 'running';
+  });
 }
 
 // ── Modals ────────────────────────────────────────────────────────────────
@@ -55,14 +70,19 @@ export function openModal({ title, body, size = 'md' }) {
       </div>
       <div class="modal-body"></div>
     </div>`;
+  const modalEl   = backdrop.querySelector('.modal');
   const modalBody = backdrop.querySelector('.modal-body');
   if (typeof body === 'string') modalBody.innerHTML = body;
   else if (body instanceof HTMLElement) modalBody.appendChild(body);
 
   const close = () => {
-    backdrop.style.opacity = '0';
-    setTimeout(() => backdrop.remove(), 150);
+    if (backdrop._closing) return;
+    backdrop._closing = true;
+    modalEl.classList.add('closing');
+    backdrop.classList.add('closing');
+    setTimeout(() => backdrop.remove(), 180);
   };
+
   backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
   backdrop.querySelector('.modal-close').addEventListener('click', close);
   document.addEventListener('keydown', function esc(e) {
@@ -70,6 +90,11 @@ export function openModal({ title, body, size = 'md' }) {
   });
 
   root.appendChild(backdrop);
+  // Focus the modal for accessibility
+  requestAnimationFrame(() => {
+    const first = modalEl.querySelector('input, select, textarea, button:not(.modal-close)');
+    if (first) first.focus();
+  });
   return { close, backdrop, body: modalBody };
 }
 
@@ -84,13 +109,29 @@ export async function confirm({ title = 'Confirm', message, confirmText = 'Confi
       </div>`;
     const m = openModal({ title, body: wrap });
     wrap.querySelector('[data-act="cancel"]').onclick = () => { m.close(); resolve(false); };
-    wrap.querySelector('[data-act="ok"]').onclick = () => { m.close(); resolve(true); };
+    wrap.querySelector('[data-act="ok"]').onclick    = () => { m.close(); resolve(true); };
   });
 }
 
 // ── Loading / empty states ────────────────────────────────────────────────
 export const loadingHtml = (label = 'Loading…') =>
   `<div class="loader"><div class="spinner"></div><p>${escape(label)}</p></div>`;
+
+// Skeleton table rows — mimics a real data table while loading
+export function skeletonTableHtml(rows = 5, widths = ['32px', '28%', '22%', '15%', '12%', '80px']) {
+  const cells = widths.map((w) =>
+    `<td><div class="skeleton sk-line" style="width:${w};max-width:100%"></div></td>`).join('');
+  const rowsHtml = Array.from({ length: rows }, () => `<tr class="skeleton-row">${cells}</tr>`).join('');
+  return `<div class="table-wrap"><table class="data-table"><tbody>${rowsHtml}</tbody></table></div>`;
+}
+
+// Skeleton for a card body with N lines
+export function skeletonLinesHtml(lines = 3) {
+  const widths = ['80%', '65%', '75%', '55%', '70%', '60%'];
+  return Array.from({ length: lines }, (_, i) =>
+    `<div class="skeleton sk-line" style="width:${widths[i % widths.length]};margin-bottom:10px"></div>`
+  ).join('');
+}
 
 export const emptyHtml = (title, subtitle) => `
   <div class="empty">
@@ -113,6 +154,23 @@ export const errorHtml = (msg) => `
     <div class="empty-title">Something went wrong</div>
     <div>${escape(msg)}</div>
   </div>`;
+
+// ── Button loading state ───────────────────────────────────────────────────
+export function setButtonLoading(btn, loading) {
+  if (loading) {
+    btn.__savedHTML = btn.innerHTML;
+    btn.disabled = true;
+    btn.classList.add('btn-loading');
+    btn.innerHTML = `<span class="btn-text">${btn.__savedHTML}</span><span class="btn-spinner"></span>`;
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('btn-loading');
+    if (btn.__savedHTML !== undefined) {
+      btn.innerHTML = btn.__savedHTML;
+      delete btn.__savedHTML;
+    }
+  }
+}
 
 // ── Status badges (centralised so colors stay consistent) ─────────────────
 const STATUS_BADGE = {
@@ -175,8 +233,6 @@ export const initials = (name) => {
 export const shortId = (id) => id ? id.slice(0, 8) : '—';
 
 // ── Form helper ───────────────────────────────────────────────────────────
-// Reads named inputs from a <form> element into a plain object,
-// converting blank strings to undefined and `[type=number]` to numbers.
 export function readForm(form) {
   const data = {};
   for (const el of form.elements) {
@@ -185,7 +241,6 @@ export function readForm(form) {
     if (v === '') { data[el.name] = undefined; continue; }
     if (el.type === 'number') v = Number(v);
     if (el.type === 'datetime-local') {
-      // <input type=datetime-local> has no timezone — append local TZ for an ISO string the API accepts.
       v = new Date(v).toISOString();
     }
     data[el.name] = v;
@@ -202,3 +257,63 @@ export function animateRows(tbody, max = 12) {
     r.style.animationDelay = `${i * 18}ms`;
   });
 }
+
+// ── Inline form validation ─────────────────────────────────────────────────
+function validateInput(input) {
+  const field = input.closest('.field');
+  if (!field) return;
+  // Don't validate untouched pristine fields
+  if (!input._touched && input.validity.valid) return;
+  input._touched = true;
+
+  let errorEl = field.querySelector('.field-error');
+  if (!errorEl) {
+    errorEl = document.createElement('div');
+    errorEl.className = 'field-error';
+    field.appendChild(errorEl);
+  }
+  if (!input.validity.valid) {
+    field.classList.add('field-invalid');
+    field.classList.remove('field-valid');
+    errorEl.textContent = input.validationMessage;
+  } else {
+    field.classList.remove('field-invalid');
+    field.classList.add('field-valid');
+    errorEl.textContent = '';
+  }
+}
+
+// ── Global event delegation ────────────────────────────────────────────────
+// Ripple on every .btn click
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.btn');
+  if (!btn || btn.disabled) return;
+  const rect = btn.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height) * 2;
+  const ripple = document.createElement('span');
+  ripple.className = 'ripple';
+  ripple.style.cssText = [
+    `width:${size}px`,
+    `height:${size}px`,
+    `left:${e.clientX - rect.left - size / 2}px`,
+    `top:${e.clientY - rect.top - size / 2}px`,
+  ].join(';');
+  btn.appendChild(ripple);
+  ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+}, { passive: true });
+
+// Blur validation on form inputs
+document.addEventListener('blur', (e) => {
+  const el = e.target;
+  if (el.matches('.input, .select, .textarea') && el.closest('form')) {
+    validateInput(el);
+  }
+}, true);
+
+// Clear validation error as user types (once touched)
+document.addEventListener('input', (e) => {
+  const el = e.target;
+  if (el.matches('.input, .select, .textarea') && el._touched) {
+    validateInput(el);
+  }
+}, { passive: true });

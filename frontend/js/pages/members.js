@@ -3,10 +3,13 @@ import { api } from '../api.js';
 import { store } from '../store.js';
 import {
   escape, openModal, toast, confirm, readForm,
-  loadingHtml, errorHtml, fmtDate, fmtMoney, initials, statusBadge, animateRows,
+  loadingHtml, skeletonTableHtml, skeletonLinesHtml, errorHtml,
+  fmtDate, fmtMoney, initials, statusBadge, animateRows, setButtonLoading,
 } from '../ui.js';
 
 export async function renderMembers({ root }) {
+  const isSuperAdmin = store.isSuperAdmin;
+
   root.innerHTML = `
     <div class="page-header">
       <div>
@@ -14,7 +17,7 @@ export async function renderMembers({ root }) {
         <div class="subtitle">People who can join kitty groups.</div>
       </div>
       <div class="page-actions">
-        <button class="btn" id="newMemberBtn">+ Add member</button>
+        ${isSuperAdmin ? '<button class="btn" id="newMemberBtn">+ Add member</button>' : ''}
       </div>
     </div>
     <div class="toolbar">
@@ -28,7 +31,7 @@ export async function renderMembers({ root }) {
   let members = [];
 
   async function reload() {
-    container.innerHTML = loadingHtml();
+    container.innerHTML = skeletonTableHtml(6, ['32px', '28%', '22%', '14%', '12%', '96px']);
     try {
       members = (await api.members.list()) || [];
       paint();
@@ -52,10 +55,11 @@ export async function renderMembers({ root }) {
       return;
     }
 
+    const isSuperAdmin = store.isSuperAdmin;
     container.innerHTML = `
       <div class="table-wrap"><table class="data-table">
         <thead><tr>
-          <th></th><th>Name</th><th>Email</th><th>Phone</th><th>Joined</th><th></th>
+          <th></th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Joined</th><th></th>
         </tr></thead>
         <tbody>
           ${filtered.map((m) => `
@@ -64,11 +68,12 @@ export async function renderMembers({ root }) {
               <td><a href="#/members/${escape(m.id)}"><strong>${escape(m.name)}</strong></a><div class="text-muted mono">${escape(m.id.slice(0, 8))}</div></td>
               <td>${escape(m.email)}</td>
               <td>${escape(m.phone)}</td>
+              <td>${statusBadge(m.global_role || 'User')}</td>
               <td class="text-muted">${fmtDate(m.created_at)}</td>
               <td class="actions">
                 <a class="btn btn-secondary btn-sm" href="#/members/${escape(m.id)}">Open</a>
-                <button class="btn btn-secondary btn-sm" data-edit="${escape(m.id)}">Edit</button>
-                <button class="btn btn-danger btn-sm" data-del="${escape(m.id)}">Delete</button>
+                ${isSuperAdmin ? `<button class="btn btn-secondary btn-sm" data-edit="${escape(m.id)}">Edit</button>` : ''}
+                ${isSuperAdmin ? `<button class="btn btn-danger btn-sm" data-del="${escape(m.id)}">Delete</button>` : ''}
               </td>
             </tr>`).join('')}
         </tbody></table></div>`;
@@ -76,22 +81,24 @@ export async function renderMembers({ root }) {
     const tbody = container.querySelector('tbody');
     animateRows(tbody);
 
-    tbody.querySelectorAll('[data-edit]').forEach((b) =>
-      b.addEventListener('click', () => openMemberForm(members.find((m) => m.id === b.dataset.edit), reload)));
-    tbody.querySelectorAll('[data-del]').forEach((b) =>
-      b.addEventListener('click', async () => {
-        const m = members.find((x) => x.id === b.dataset.del);
-        if (!await confirm({ title: 'Delete member?', message: `Permanently delete "${m.name}"?`, confirmText: 'Delete', danger: true })) return;
-        try {
-          await api.members.remove(m.id);
-          toast('Member deleted', { type: 'success' });
-          reload();
-        } catch (e) { toast(e.message, { type: 'error', title: 'Delete failed' }); }
-      }));
+    if (isSuperAdmin) {
+      tbody.querySelectorAll('[data-edit]').forEach((b) =>
+        b.addEventListener('click', () => openMemberForm(members.find((m) => m.id === b.dataset.edit), reload)));
+      tbody.querySelectorAll('[data-del]').forEach((b) =>
+        b.addEventListener('click', async () => {
+          const m = members.find((x) => x.id === b.dataset.del);
+          if (!await confirm({ title: 'Delete member?', message: `Permanently delete "${m.name}"?`, confirmText: 'Delete', danger: true })) return;
+          try {
+            await api.members.remove(m.id);
+            toast('Member deleted', { type: 'success' });
+            reload();
+          } catch (e) { toast(e.message, { type: 'error', title: 'Delete failed' }); }
+        }));
+    }
   }
 
   search.addEventListener('input', paint);
-  root.querySelector('#newMemberBtn').addEventListener('click', () => openMemberForm(null, reload));
+  root.querySelector('#newMemberBtn')?.addEventListener('click', () => openMemberForm(null, reload));
 
   reload();
 }
@@ -118,6 +125,12 @@ function openMemberForm(member, onSaved) {
           <input class="input" id="phone" name="phone" required minlength="10" maxlength="15"
                  value="${escape(member?.phone || '')}" placeholder="9876543210" />
         </div>
+        ${!isEdit ? `
+        <div class="field full">
+          <label for="password">Password</label>
+          <input class="input" id="password" name="password" type="password" required minlength="8"
+                 placeholder="Minimum 8 characters" autocomplete="new-password" />
+        </div>` : ''}
       </div>
       <div class="form-actions">
         <button type="button" class="btn btn-secondary" data-act="cancel">Cancel</button>
@@ -130,7 +143,7 @@ function openMemberForm(member, onSaved) {
     e.preventDefault();
     const data = readForm(e.target);
     const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true;
+    setButtonLoading(btn, true);
     try {
       if (isEdit) await api.members.update(member.id, data);
       else await api.members.create(data);
@@ -138,7 +151,7 @@ function openMemberForm(member, onSaved) {
       m.close(); onSaved?.();
     } catch (err) {
       toast(err.message, { type: 'error', title: 'Save failed' });
-    } finally { btn.disabled = false; }
+    } finally { setButtonLoading(btn, false); }
   };
 }
 
@@ -154,7 +167,20 @@ export async function renderMemberDetail({ root, params }) {
       </div>
       <div class="page-actions" id="memberActions"></div>
     </div>
-    <div id="memberBody">${loadingHtml()}</div>
+    <div id="memberBody">
+      <div class="grid grid-cols-3" style="margin-bottom:20px">
+        ${[1,2,3].map(() => `
+          <div class="stat">
+            <div class="skeleton sk-sm" style="width:60%;margin-bottom:10px"></div>
+            <div class="skeleton sk-line" style="width:40%;height:28px;margin-bottom:8px"></div>
+            <div class="skeleton sk-sm" style="width:70%"></div>
+          </div>`).join('')}
+      </div>
+      <div class="grid grid-cols-2">
+        <div class="card"><div class="card-body">${skeletonLinesHtml(5)}</div></div>
+        <div class="card"><div class="card-body">${skeletonLinesHtml(4)}</div></div>
+      </div>
+    </div>
   `;
   try {
     const summary = await api.profiles.summary(id);
@@ -265,13 +291,13 @@ function openProfileForm(memberId, profile, onSaved) {
     // Convert YYYY-MM-DD: backend accepts the literal "YYYY-MM-DD" string.
     if (data.date_of_birth instanceof Date) data.date_of_birth = data.date_of_birth.toISOString().slice(0, 10);
     const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true;
+    setButtonLoading(btn, true);
     try {
       await api.profiles.upsert(memberId, data);
       toast('Profile updated', { type: 'success' });
       m.close(); onSaved?.();
     } catch (err) {
       toast(err.message, { type: 'error', title: 'Save failed' });
-    } finally { btn.disabled = false; }
+    } finally { setButtonLoading(btn, false); }
   };
 }
